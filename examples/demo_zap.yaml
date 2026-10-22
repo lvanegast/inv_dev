@@ -1,0 +1,74 @@
+id: order-processing-zap
+name: "Procesador de Pedidos y Notificaciones (Zap/Make Replica)"
+description: "Flujo automatizado con bifurcación condicional, transformación de datos, cálculo de puntos y registro."
+status: active
+
+trigger:
+  id: webhook_trigger
+  name: "Receptor de Pedidos"
+  type: trigger_webhook
+  config: {}
+
+nodes:
+  - id: check_order_confirmed
+    name: "Filtro: Pedido Confirmado"
+    type: action_filter
+    config:
+      condition: "{{trigger.body.status}} == 'confirmed'"
+
+  - id: transform_order_data
+    name: "Transformador: Normalizar Pedido"
+    type: action_transform
+    config:
+      output:
+        customer_name: "{{trigger.body.customer.first_name}} {{trigger.body.customer.last_name}}"
+        customer_email: "{{trigger.body.customer.email}}"
+        total_amount: "{{trigger.body.total}}"
+        item_count: "{{trigger.body.items}}"
+
+  - id: calculate_loyalty_points
+    name: "Código: Puntos de Lealtad"
+    type: action_code
+    config:
+      code: |
+        total = input.get("transform_order_data", {}).get("total_amount", 0)
+        # 1 punto por cada $10 gastados, con bono de 20 si supera $100
+        base_points = int(total // 10)
+        bonus = 20 if total >= 100 else 0
+        output = {
+            "points": base_points + bonus,
+            "tier": "VIP" if (base_points + bonus) > 50 else "STANDARD"
+        }
+
+  - id: log_success
+    name: "Logger: Confirmación Exitosa"
+    type: action_log
+    config:
+      level: info
+      message: "Pedido procesado para {{transform_order_data.customer_name}} (Email: {{transform_order_data.customer_email}}). Total: ${{transform_order_data.total_amount}}. Puntos: {{calculate_loyalty_points.points}} (Tier: {{calculate_loyalty_points.tier}})"
+
+  - id: log_rejected_order
+    name: "Logger: Pedido Descartado"
+    type: action_log
+    config:
+      level: warning
+      message: "Pedido descartado: estado no confirmado (Status actual: {{trigger.body.status}})"
+
+edges:
+  - source: webhook_trigger
+    target: check_order_confirmed
+    condition: "{{trigger.body.status}} == 'confirmed'"
+
+  - source: check_order_confirmed
+    target: transform_order_data
+
+  - source: transform_order_data
+    target: calculate_loyalty_points
+
+  - source: calculate_loyalty_points
+    target: log_success
+
+  # Rama alternativa (Router if/else)
+  - source: webhook_trigger
+    target: log_rejected_order
+    condition: "{{trigger.body.status}} != 'confirmed'"
