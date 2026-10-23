@@ -1,6 +1,7 @@
 """Registro central de tipos de nodos disponibles en FlowEngine."""
 
 from flowengine.core.models import NodeDefinition
+from flowengine.nodes.actions_batch import AggregatorNode, IteratorNode
 from flowengine.nodes.actions_filter import FilterAction
 from flowengine.nodes.actions_http import HttpRequestAction
 from flowengine.nodes.actions_log import LogAction
@@ -17,6 +18,8 @@ NODE_REGISTRY: dict[str, type[BaseNode]] = {
     "action_transform": TransformAction,
     "action_code": CodeAction,
     "action_log": LogAction,
+    "action_iterator": IteratorNode,
+    "action_aggregator": AggregatorNode,
 }
 
 

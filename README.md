@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-32%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-38%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -81,12 +81,14 @@ curl -X POST http://127.0.0.1:8000/webhook/order-processing-zap \
 | `action_transform` | Acción | Mapeo y formateo de estructuras de datos JSON. |
 | `action_code` | Acción | Ejecución de funciones de transformación personalizadas en Python. |
 | `action_log` | Acción | Registro de eventos y alertas formateadas en consola. |
+| `action_iterator` | Lotes | Desempaqueta un array para ejecutar pasos posteriores por cada elemento (`{{item}}`). |
+| `action_aggregator` | Lotes | Agrupa y consolida los resultados del bucle (sumatorias, listas, conteos). |
 
 ---
 
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 32 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite de 38 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest

@@ -1,0 +1,66 @@
+id: batch-order-flow
+name: "Procesador por Lotes de Pedidos (Iterator & Aggregator)"
+description: "Demuestra cómo procesar cada ítem de un pedido individualmente y luego consolidar los subtotales con Make/Zapier batching."
+status: active
+
+trigger:
+  id: webhook_order
+  name: "Receptor de Pedido Masivo"
+  type: trigger_webhook
+  config: {}
+
+nodes:
+  - id: item_iterator
+    name: "Iterator: Desempaquetar Items"
+    type: action_iterator
+    config:
+      array: "{{trigger.body.items}}"
+
+  - id: compute_item_tax
+    name: "Código: Calcular Subtotal con IVA"
+    type: action_code
+    config:
+      code: |
+        item = input.get("item", {})
+        price = float(item.get("price", 0.0))
+        qty = int(item.get("qty", 1))
+        sku = str(item.get("sku", "UNKNOWN"))
+        subtotal = price * qty
+        tax = round(subtotal * 0.19, 2)
+        total = round(subtotal + tax, 2)
+        output = {
+            "sku": sku,
+            "unit_price": price,
+            "qty": qty,
+            "subtotal": subtotal,
+            "tax": tax,
+            "total_with_tax": total
+        }
+
+  - id: total_aggregator
+    name: "Aggregator: Sumar Totales"
+    type: action_aggregator
+    config:
+      source_node: compute_item_tax
+      target_field: total_with_tax
+      operation: sum
+
+  - id: log_order_summary
+    name: "Logger: Resumen Consolidado"
+    type: action_log
+    config:
+      level: info
+      message: "Orden {{trigger.body.order_id}} procesada exitosamente. Total consolidado con IVA ({{total_aggregator.count}} items): ${{total_aggregator.aggregated}}"
+
+edges:
+  - source: webhook_order
+    target: item_iterator
+
+  - source: item_iterator
+    target: compute_item_tax
+
+  - source: compute_item_tax
+    target: total_aggregator
+
+  - source: total_aggregator
+    target: log_order_summary

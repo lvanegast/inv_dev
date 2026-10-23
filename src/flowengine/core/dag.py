@@ -108,3 +108,65 @@ class DAGGraph:
                 return True, None
 
         return False, f"Ninguna condición de entrada se cumplió para el nodo '{node_id}'."
+
+    def find_loop_block(self, iterator_id: str) -> tuple[list[str], str | None]:
+        """Encuentra los nodos que pertenecen al bucle entre un Iterator y su Aggregator.
+
+        Retorna: (loop_node_ids_en_orden_topológico, aggregator_node_id_o_None)
+        """
+        # 1. Buscar si hay un aggregator alcanzable downstream
+        visited: set[str] = set()
+        queue = deque([iterator_id])
+        aggregator_id: str | None = None
+
+        while queue:
+            curr = queue.popleft()
+            for edge in self.outgoing_edges[curr]:
+                target = edge.target
+                if target not in visited:
+                    visited.add(target)
+                    node_def = self.nodes_by_id[target]
+                    if node_def.type == "action_aggregator":
+                        aggregator_id = target
+                        break
+                    queue.append(target)
+            if aggregator_id:
+                break
+
+        if not aggregator_id:
+            return [], None
+
+        # 2. Encontrar nodos alcanzables desde el iterator que puedan llegar al aggregator
+        reachable_from_iter: set[str] = set()
+        q = deque([iterator_id])
+        while q:
+            curr = q.popleft()
+            for edge in self.outgoing_edges[curr]:
+                target = edge.target
+                if target != aggregator_id and target not in reachable_from_iter:
+                    reachable_from_iter.add(target)
+                    q.append(target)
+
+        can_reach_agg: set[str] = set()
+
+        def can_reach(nid: str, seen: set[str]) -> bool:
+            if nid == aggregator_id:
+                return True
+            if nid in can_reach_agg:
+                return True
+            if nid in seen:
+                return False
+            seen.add(nid)
+            for e in self.outgoing_edges[nid]:
+                if can_reach(e.target, seen.copy()):
+                    can_reach_agg.add(nid)
+                    return True
+            return False
+
+        loop_nodes = [nid for nid in reachable_from_iter if can_reach(nid, set()) and nid != aggregator_id]
+
+        # Ordenar según orden topológico
+        topo_order = [nid for batch in self.get_topological_batches() for nid in batch]
+        sorted_loop_nodes = [nid for nid in topo_order if nid in loop_nodes]
+
+        return sorted_loop_nodes, aggregator_id

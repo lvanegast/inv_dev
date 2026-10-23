@@ -49,15 +49,24 @@ class FlowRunner:
 
         batches = self.dag.get_topological_batches()
         any_failed = False
+        handled_in_loop: set[str] = set()
 
         for batch in batches:
-            # Ejecutar nodos del mismo lote que sean independientes
-            tasks = [self._execute_node_safe(node_id, context, run) for node_id in batch]
-            results = await asyncio.gather(*tasks)
+            # Filtrar nodos ya procesados dentro de un bucle de iteración
+            nodes_to_run = [nid for nid in batch if nid not in handled_in_loop]
+            if not nodes_to_run:
+                continue
 
-            for _node_id, status in results:
-                if status == NodeStatus.FAILED:
-                    any_failed = True
+            for node_id in nodes_to_run:
+                node_def = self.dag.nodes_by_id[node_id]
+                if node_def.type == "action_iterator":
+                    status = await self._execute_iterator_loop(node_id, context, run, handled_in_loop)
+                    if status == NodeStatus.FAILED:
+                        any_failed = True
+                else:
+                    _, status = await self._execute_node_safe(node_id, context, run)
+                    if status == NodeStatus.FAILED:
+                        any_failed = True
 
         run.finished_at = datetime.now(UTC)
         if any_failed:
@@ -66,6 +75,75 @@ class FlowRunner:
             run.status = RunStatus.SUCCESS
 
         return run
+
+    async def _execute_iterator_loop(
+        self,
+        iterator_id: str,
+        context: dict[str, Any],
+        run: ExecutionRun,
+        handled_in_loop: set[str],
+    ) -> NodeStatus:
+        """Ejecuta un nodo Iterator y su sub-grafo iterativo hasta el Aggregator."""
+        # 1. Ejecutar el nodo Iterator
+        _, status = await self._execute_node_safe(iterator_id, context, run)
+        if status != NodeStatus.SUCCESS:
+            return status
+
+        iterator_output = context.get(iterator_id, {})
+        items = iterator_output.get("items", []) if isinstance(iterator_output, dict) else []
+
+        # 2. Localizar nodos del bucle
+        loop_nodes, _aggregator_id = self.dag.find_loop_block(iterator_id)
+        if not loop_nodes:
+            return NodeStatus.SUCCESS
+
+        # Marcar para no ejecutarlos en el flujo exterior
+        handled_in_loop.update(loop_nodes)
+
+        # 3. Ejecutar el bucle para cada item
+        loop_results: list[dict[str, Any]] = []
+
+        for idx, item in enumerate(items):
+            iter_ctx = context.copy()
+            iter_ctx["item"] = item
+            iter_ctx["index"] = idx
+            iter_ctx["is_first"] = idx == 0
+            iter_ctx["is_last"] = idx == len(items) - 1
+            iter_ctx[iterator_id] = {"item": item, "index": idx}
+
+            for loop_nid in loop_nodes:
+                should_run, _ = self.dag.should_execute_node(loop_nid, iter_ctx)
+                if should_run:
+                    loop_node_def = self.dag.nodes_by_id[loop_nid]
+                    node_inst = create_node_instance(loop_node_def)
+                    out = await node_inst.execute(iter_ctx)
+                    iter_ctx[loop_nid] = out
+                    iter_ctx[f"__node_status_{loop_nid}"] = "success"
+
+            loop_results.append(iter_ctx)
+
+        context["__loop_results__"] = loop_results
+
+        # 4. Registrar en step_results de la ejecución
+        for loop_nid in loop_nodes:
+            last_out = (
+                loop_results[-1].get(loop_nid) if loop_results and loop_nid in loop_results[-1] else None
+            )
+            run.step_results[loop_nid] = StepResult(
+                node_id=loop_nid,
+                status=NodeStatus.SUCCESS if items else NodeStatus.SKIPPED,
+                started_at=datetime.now(UTC),
+                finished_at=datetime.now(UTC),
+                duration_ms=0.0,
+                input_data={},
+                output_data={
+                    "iterations": len(items),
+                    "sample": last_out,
+                },
+            )
+            context[f"__node_status_{loop_nid}"] = "success"
+
+        return NodeStatus.SUCCESS
 
     async def _execute_node_safe(
         self,
