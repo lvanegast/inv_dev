@@ -1,0 +1,51 @@
+id: scheduled-health-check
+name: "Monitor de Salud del Sistema (Scheduler Periódico)"
+description: "Ejecución desatendida cada 5 segundos para monitorear el estado del sistema y generar alertas de latencia."
+status: active
+
+trigger:
+  id: timer_trigger
+  name: "Temporizador (Cada 5s)"
+  type: trigger_schedule
+  config:
+    interval_seconds: 5
+
+nodes:
+  - id: generate_probe
+    name: "Transformador: Datos de Sonda"
+    type: action_transform
+    config:
+      output:
+        probe_id: "probe-system-check"
+        timestamp: "{{now()}}"
+        service: "payment-gateway"
+
+  - id: analyze_metrics
+    name: "Código: Diagnóstico de Sonda"
+    type: action_code
+    config:
+      code: |
+        # Simular lectura de latencia en milisegundos
+        simulated_latency = 18.5
+        output = {
+            "latency_ms": simulated_latency,
+            "healthy": simulated_latency < 50.0,
+            "status_label": "OPTIMAL" if simulated_latency < 30.0 else "DEGRADED"
+        }
+
+  - id: log_heartbeat
+    name: "Logger: Registro de Latido"
+    type: action_log
+    config:
+      level: info
+      message: "[HEARTBEAT] Sonda {{generate_probe.service}} a las {{generate_probe.timestamp}} -> Latencia: {{analyze_metrics.latency_ms}}ms (Estado: {{analyze_metrics.status_label}})"
+
+edges:
+  - source: timer_trigger
+    target: generate_probe
+
+  - source: generate_probe
+    target: analyze_metrics
+
+  - source: analyze_metrics
+    target: log_heartbeat

@@ -133,10 +133,43 @@ def serve(
     host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host del servidor"),
     port: int = typer.Option(8000, "--port", "-p", help="Puerto HTTP"),
     reload: bool = typer.Option(False, "--reload", help="Modo auto-recarga para desarrollo"),
+    with_scheduler: bool = typer.Option(
+        False, "--with-scheduler", help="Iniciar también el planificador en segundo plano (Cron/Interval)"
+    ),
 ):
     """Inicia el servidor de Webhooks y API de FlowEngine."""
-    console.print(f"[bold green]🚀 Iniciando FlowEngine Webhook Server en http://{host}:{port}[/bold green]")
+    import os
+
+    if with_scheduler:
+        os.environ["FLOWENGINE_ENABLE_SCHEDULER"] = "true"
+        console.print("[bold yellow]⏰ Scheduler en segundo plano habilitado.[/bold yellow]")
+
+    console.print(f"[bold green]Iniciando FlowEngine Webhook Server en http://{host}:{port}[/bold green]")
     uvicorn.run("flowengine.server.app:app", host=host, port=port, reload=reload)
+
+
+@app.command()
+def schedule():
+    """Inicia el planificador autónomo (Scheduler) en primer plano para ejecutar flujos periódicos."""
+    import contextlib
+
+    from flowengine.core.scheduler import SchedulerService
+
+    repo = FlowRepository()
+    service = SchedulerService(repo)
+
+    async def _run():
+        await service.start()
+        console.print("[bold green][OK] Scheduler iniciado. Presiona Ctrl+C para detener.[/bold green]")
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except (KeyboardInterrupt, asyncio.CancelledError):
+            await service.stop()
+            console.print("[dim yellow]Scheduler detenido limpiamente.[/dim yellow]")
+
+    with contextlib.suppress(KeyboardInterrupt):
+        asyncio.run(_run())
 
 
 if __name__ == "__main__":

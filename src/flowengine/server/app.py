@@ -1,5 +1,6 @@
 """Servidor FastAPI de Ingestión de Webhooks y API de FlowEngine."""
 
+import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
@@ -8,17 +9,23 @@ from fastapi import FastAPI, HTTPException, Request
 
 from flowengine.core.models import FlowDefinition
 from flowengine.core.runner import FlowRunner
+from flowengine.core.scheduler import SchedulerService
 from flowengine.storage.repository import FlowRepository
 
-# Repositorio global del servidor
+# Repositorio y Scheduler globales del servidor
 repo = FlowRepository()
+scheduler = SchedulerService(repo)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Inicializar la base de datos SQLite WAL al arrancar
     await repo.initialize()
+    if os.getenv("FLOWENGINE_ENABLE_SCHEDULER", "false").lower() in ("true", "1", "yes"):
+        await scheduler.start()
     yield
+    if scheduler._running:
+        await scheduler.stop()
 
 
 app = FastAPI(
@@ -91,9 +98,24 @@ async def list_flows() -> list[FlowDefinition]:
 @app.post("/api/flows")
 async def register_flow(flow: FlowDefinition) -> dict[str, str]:
     await repo.save_flow(flow)
+    if scheduler._running:
+        await scheduler.reload_flows()
     return {"message": "Flujo registrado exitosamente", "flow_id": flow.id}
 
 
 @app.get("/api/runs")
 async def list_runs(flow_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
     return await repo.list_runs(flow_id=flow_id, limit=limit)
+
+
+@app.get("/api/scheduler/tasks")
+async def list_scheduled_tasks() -> list[dict[str, Any]]:
+    return [
+        {
+            "flow_id": task.flow.id,
+            "flow_name": task.flow.name,
+            "next_run_at": task.next_run_at.isoformat(),
+            "is_running": task.is_running,
+        }
+        for task in scheduler.tasks.values()
+    ]

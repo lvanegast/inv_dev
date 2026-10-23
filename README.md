@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-42%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-47%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -98,9 +98,36 @@ FlowEngine permite el uso de funciones y variables de entorno directamente en la
 
 ---
 
+## ⏰ Planificador Autónomo (Cron & Intervalos)
+
+FlowEngine incluye un motor planificador en segundo plano que vigila y dispara flujos desatendidos con temporizadores periódicos o expresiones Cron estándar de 5 campos:
+
+```yaml
+trigger:
+  id: timer_trigger
+  name: "Temporizador de Monitoreo"
+  type: trigger_schedule
+  config:
+    interval_seconds: 60  # Ejecutar cada 60 segundos
+    # O bien cron estándar:
+    # cron: "*/5 * * * *"  # Cada 5 minutos
+```
+
+Puedes ejecutar el scheduler de forma dedicada o junto al servidor de webhooks:
+
+```powershell
+# Opción A: Modo scheduler dedicado en terminal
+uv run flow schedule
+
+# Opción B: Servidor HTTP con worker del Scheduler integrado
+uv run flow serve --port 8000 --with-scheduler
+```
+
+---
+
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 42 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite de 47 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest

@@ -13,6 +13,7 @@ from flowengine.core.models import (
     StepResult,
 )
 from flowengine.core.runner import FlowRunner
+from flowengine.core.scheduler import SchedulerService, compute_next_run, match_cron
 
 __all__ = [
     "DAGGraph",
@@ -26,7 +27,10 @@ __all__ = [
     "NodeStatus",
     "RunStatus",
     "SafeConditionEvaluator",
+    "SchedulerService",
     "StepResult",
+    "compute_next_run",
     "get_nested_value",
+    "match_cron",
     "resolve_expression",
 ]
