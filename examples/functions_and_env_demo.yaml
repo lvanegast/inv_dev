@@ -1,0 +1,39 @@
+id: functions-and-env-demo
+name: "Demostración de Funciones Nativas y Secretos de Entorno"
+description: "Ilustra el uso de funciones de texto, fechas, matemáticas y variables de entorno en expresiones de FlowEngine."
+status: active
+
+trigger:
+  id: webhook_trigger
+  name: "Receptor de Registro"
+  type: trigger_webhook
+  config: {}
+
+nodes:
+  - id: format_profile
+    name: "Transformador: Formatear Perfil con Funciones"
+    type: action_transform
+    config:
+      output:
+        normalized_name: "{{title(trim(trigger.body.raw_name))}}"
+        username_handle: "{{slugify(trigger.body.raw_name)}}"
+        email_clean: "{{lower(trim(trigger.body.email))}}"
+        processed_at: "{{now()}}"
+        formatted_joined: "{{format_date(trigger.body.joined_date, '%d/%m/%Y')}}"
+        tax_calculated: "{{round(trigger.body.amount * 0.19, 2)}}"
+        total_with_tax: "{{round(trigger.body.amount * 1.19, 2)}}"
+        environment: "{{env.APP_ENV}}"
+
+  - id: log_formatted_profile
+    name: "Logger: Perfil Normalizado"
+    type: action_log
+    config:
+      level: info
+      message: "Usuario {{format_profile.normalized_name}} (@{{format_profile.username_handle}}) procesado en ambiente [{{format_profile.environment}}]. Total a facturar: ${{format_profile.total_with_tax}}"
+
+edges:
+  - source: webhook_trigger
+    target: format_profile
+
+  - source: format_profile
+    target: log_formatted_profile

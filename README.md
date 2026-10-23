@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-38%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-42%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -86,9 +86,21 @@ curl -X POST http://127.0.0.1:8000/webhook/order-processing-zap \
 
 ---
 
+## 🧮 Biblioteca de Funciones y Secretos de Entorno
+
+FlowEngine permite el uso de funciones y variables de entorno directamente en las plantillas `{{...}}`:
+
+* **Variables de entorno y secretos:** `{{env.API_KEY}}`, `{{secrets.DATABASE_URL}}`.
+* **Texto:** `{{upper(nombre)}}`, `{{lower(email)}}`, `{{trim(campo)}}`, `{{title(texto)}}`, `{{slugify(titulo)}}`, `{{replace(texto, 'viejo', 'nuevo')}}`.
+* **Matemáticas y Aritmética:** `{{round(total * 0.19, 2)}}`, `{{abs(valor)}}`, `{{min(...)}}`, `{{max(...)}}`, `{{sum(items)}}`.
+* **Fechas:** `{{now()}}`, `{{format_date(fecha, '%d/%m/%Y')}}`, `{{add_days(fecha, 7)}}`.
+* **Serialización:** `{{json(objeto)}}`.
+
+---
+
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 38 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite de 42 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest
