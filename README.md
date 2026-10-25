@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-47%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-49%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -52,15 +52,25 @@ uv run flow run examples/demo_zap.yaml --payload '{"body": {"status": "cancelled
 uv run flow history
 ```
 
-### 5. Iniciar el Servidor de Webhooks de Alta Concurrencia
+### 5. Iniciar el Servidor y Dashboard Web Interactivo
 ```powershell
-# Registrar el flujo en la base de datos
+# Registrar los flujos de ejemplo en la base de datos
 uv run flow register examples/demo_zap.yaml
+uv run flow register examples/batch_order_processing.yaml
+uv run flow register examples/functions_and_env_demo.yaml
+uv run flow register examples/scheduled_health_check.yaml
 
-# Levantar el servidor
+# Levantar el servidor y dashboard
 uv run flow serve --port 8000
 ```
-Ahora puedes disparar webhooks directamente desde cualquier herramienta o script:
+
+Abre tu navegador en **`http://127.0.0.1:8000/dashboard`** para disfrutar de:
+* **Visualizador del DAG:** Arquitectura visual de los nodos y aristas de cada flujo en tiempo real.
+* **Test Runner Interactivo:** Envío de payloads JSON arbitrarios con retroalimentación instantánea y cálculo de latencia.
+* **Historial de Ejecuciones en Vivo:** Monitoreo con auto-refresh (3s) y desglose de auditoría paso a paso (`StepResult`).
+* **Métricas Globales:** Total de flujos, ejecuciones, tasa de éxito % y tiempo promedio.
+
+También puedes disparar webhooks externamente mediante `curl` o cualquier cliente HTTP:
 ```bash
 curl -X POST http://127.0.0.1:8000/webhook/order-processing-zap \
   -H "Content-Type: application/json" \
@@ -127,7 +137,7 @@ uv run flow serve --port 8000 --with-scheduler
 
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 47 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite de 49 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest

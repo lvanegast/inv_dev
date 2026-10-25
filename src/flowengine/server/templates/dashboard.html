@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlowEngine ⚡ Dashboard</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .node-card {
+      transition: all 0.2s ease-in-out;
+    }
+    .node-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px -4px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col font-sans antialiased">
+
+  <!-- Top Navbar -->
+  <header class="bg-slate-900 border-b border-slate-800 sticky top-0 z-40 px-6 py-3.5 flex items-center justify-between shadow-lg">
+    <div class="flex items-center space-x-4">
+      <div class="flex items-center space-x-2">
+        <span class="text-2xl">⚡</span>
+        <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-emerald-400 to-teal-300 bg-clip-text text-transparent">
+          FlowEngine
+        </h1>
+        <span class="text-xs bg-emerald-500/10 text-emerald-400 font-semibold px-2 py-0.5 rounded border border-emerald-500/20">
+          v0.1.0
+        </span>
+      </div>
+      <div class="hidden md:flex items-center space-x-2 text-xs text-slate-400 pl-4 border-l border-slate-800">
+        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>Motor Activo • SQLite WAL</span>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="flex items-center space-x-6">
+      <div class="hidden lg:flex items-center space-x-6 text-xs">
+        <div>
+          <span class="text-slate-400">Flujos:</span>
+          <span id="stat-flows" class="font-bold text-white ml-1">0</span>
+        </div>
+        <div>
+          <span class="text-slate-400">Corridas:</span>
+          <span id="stat-runs" class="font-bold text-white ml-1">0</span>
+        </div>
+        <div>
+          <span class="text-slate-400">Éxito:</span>
+          <span id="stat-rate" class="font-bold text-emerald-400 ml-1">100%</span>
+        </div>
+        <div>
+          <span class="text-slate-400">Promedio:</span>
+          <span id="stat-avg" class="font-bold text-cyan-400 ml-1">0ms</span>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <label class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer">
+          <input type="checkbox" id="auto-refresh" checked class="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500">
+          <span>Auto-refresh (3s)</span>
+        </label>
+        <button onclick="refreshAll()" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700 hover:text-white transition" title="Refrescar datos">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Grid -->
+  <main class="flex-1 p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 max-w-7xl mx-auto w-full">
+
+    <!-- Left Column (Flujos & Disparador) -->
+    <div class="lg:col-span-4 flex flex-col space-y-6">
+
+      <!-- Flujos Disponibles Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider flex items-center space-x-2">
+            <span>📋</span>
+            <span>Flujos Registrados</span>
+          </h2>
+          <span id="flows-count-badge" class="text-xs bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full font-mono">0</span>
+        </div>
+        <div id="flows-list" class="space-y-2.5 max-h-[320px] overflow-y-auto pr-1">
+          <!-- Flow items loaded dynamically -->
+          <div class="text-xs text-slate-500 text-center py-6">Cargando flujos...</div>
+        </div>
+      </div>
+
+      <!-- Test Runner / Disparador Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider flex items-center space-x-2">
+            <span>🚀</span>
+            <span>Disparar Flujo (Test Runner)</span>
+          </h2>
+          <span id="selected-flow-badge" class="text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded font-mono truncate max-w-[140px]">
+            Ninguno
+          </span>
+        </div>
+        
+        <p class="text-xs text-slate-400 mb-3">
+          Envía un payload de prueba directo al flujo seleccionado para observar el flujo de ejecución en tiempo real.
+        </p>
+
+        <div class="mb-3">
+          <label class="block text-xs font-medium text-slate-300 mb-1">Payload JSON de Prueba:</label>
+          <textarea id="test-payload" rows="6" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs font-mono text-emerald-300 focus:outline-none focus:border-emerald-500 transition resize-none">{
+  "body": {
+    "status": "confirmed",
+    "total": 150.0,
+    "items": 4,
+    "customer": {
+      "first_name": "Ana",
+      "email": "ana@example.com"
+    }
+  }
+}</textarea>
+        </div>
+
+        <button id="run-btn" onclick="executeCurrentFlow()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2 px-4 rounded-lg text-xs flex items-center justify-center space-x-2 shadow-lg shadow-emerald-900/30 transition disabled:opacity-50 disabled:cursor-not-allowed">
+          <span>⚡</span>
+          <span id="run-btn-text">Ejecutar Flujo Ahora</span>
+        </button>
+
+        <div id="run-status-alert" class="mt-3 hidden text-xs p-2.5 rounded-lg border"></div>
+      </div>
+
+      <!-- Tareas Programadas Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider flex items-center space-x-2">
+            <span>⏰</span>
+            <span>Tareas Programadas</span>
+          </h2>
+          <span id="scheduler-badge" class="text-xs bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded font-mono">0</span>
+        </div>
+        <div id="scheduler-tasks-list" class="space-y-2 text-xs">
+          <div class="text-slate-500 text-center py-4">No hay tareas programadas activas.</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Column (Visualizador DAG & Historial) -->
+    <div class="lg:col-span-8 flex flex-col space-y-6">
+
+      <!-- Visualizador DAG -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex flex-col">
+        <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+          <div>
+            <h2 id="view-flow-name" class="text-base font-bold text-white flex items-center space-x-2">
+              <span>Selecciona un flujo</span>
+            </h2>
+            <p id="view-flow-desc" class="text-xs text-slate-400 mt-0.5">Visualización del Grafo Acíclico Dirigido (DAG)</p>
+          </div>
+          <div id="view-flow-tags" class="flex items-center space-x-2"></div>
+        </div>
+
+        <!-- DAG Container -->
+        <div id="dag-container" class="min-h-[220px] bg-slate-950/80 rounded-lg p-4 border border-slate-800/80 overflow-x-auto flex items-center justify-start space-x-4">
+          <div class="w-full text-center text-slate-500 text-xs py-10">
+            Haz clic en un flujo de la lista izquierda para cargar su arquitectura de nodos y aristas.
+          </div>
+        </div>
+      </div>
+
+      <!-- Historial de Ejecuciones -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm flex-1 flex flex-col">
+        <div class="flex items-center justify-between mb-4">
+          <div class="flex items-center space-x-3">
+            <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider flex items-center space-x-2">
+              <span>📊</span>
+              <span>Historial de Ejecuciones en Vivo</span>
+            </h2>
+            <span class="text-xs text-slate-500">(Últimas 20)</span>
+          </div>
+          <button onclick="fetchRuns()" class="text-xs text-slate-400 hover:text-emerald-400 transition flex items-center space-x-1">
+            <span>Actualizar</span>
+          </button>
+        </div>
+
+        <!-- Runs Table -->
+        <div class="overflow-x-auto flex-1">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-800 text-slate-400 font-medium">
+                <th class="py-2.5 px-3">Run ID</th>
+                <th class="py-2.5 px-3">Flujo</th>
+                <th class="py-2.5 px-3">Estado</th>
+                <th class="py-2.5 px-3">Duración</th>
+                <th class="py-2.5 px-3">Fecha y Hora</th>
+                <th class="py-2.5 px-3 text-right">Detalle</th>
+              </tr>
+            </thead>
+            <tbody id="runs-table-body" class="divide-y divide-slate-800/60">
+              <tr>
+                <td colspan="6" class="text-center py-8 text-slate-500">Cargando historial...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Step Details Modal -->
+  <div id="step-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
+        <div>
+          <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+            <span>🔍 Detalle de Ejecución</span>
+            <span id="modal-run-id" class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded"></span>
+          </h3>
+          <p id="modal-run-meta" class="text-xs text-slate-400 mt-1"></p>
+        </div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+          ✕
+        </button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 overflow-y-auto space-y-4">
+        <!-- Trigger Payload -->
+        <div>
+          <h4 class="text-xs font-semibold uppercase text-slate-400 mb-2">📥 Payload Inicial (Trigger)</h4>
+          <pre id="modal-trigger-payload" class="bg-slate-950 border border-slate-800 text-slate-300 p-3 rounded-lg text-xs font-mono overflow-x-auto max-h-36"></pre>
+        </div>
+
+        <!-- Steps breakdown -->
+        <div>
+          <h4 class="text-xs font-semibold uppercase text-slate-400 mb-2">⚡ Pasos Ejecutados en el DAG</h4>
+          <div id="modal-steps-list" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3 border-t border-slate-800 bg-slate-900 flex justify-end">
+        <button onclick="closeModal()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg text-slate-200 transition">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Client-side Logic -->
+  <script>
+    let registeredFlows = [];
+    let currentFlow = null;
+    let refreshInterval = null;
+
+    async function initDashboard() {
+      await Promise.all([fetchStats(), fetchFlows(), fetchRuns(), fetchSchedulerTasks()]);
+      setupAutoRefresh();
+    }
+
+    function setupAutoRefresh() {
+      const checkbox = document.getElementById('auto-refresh');
+      const startTimer = () => {
+        if (refreshInterval) clearInterval(refreshInterval);
+        refreshInterval = setInterval(() => {
+          if (checkbox.checked) {
+            fetchStats();
+            fetchRuns();
+            fetchSchedulerTasks();
+          }
+        }, 3000);
+      };
+
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) startTimer();
+        else if (refreshInterval) clearInterval(refreshInterval);
+      });
+      startTimer();
+    }
+
+    async function refreshAll() {
+      await Promise.all([fetchStats(), fetchFlows(), fetchRuns(), fetchSchedulerTasks()]);
+    }
+
+    async function fetchStats() {
+      try {
+        const res = await fetch('/api/stats');
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById('stat-flows').textContent = data.total_flows;
+        document.getElementById('stat-runs').textContent = data.total_runs;
+        document.getElementById('stat-rate').textContent = data.success_rate + '%';
+        document.getElementById('stat-avg').textContent = data.avg_duration_ms + 'ms';
+      } catch (e) {
+        console.error('Error fetching stats:', e);
+      }
+    }
+
+    async function fetchFlows() {
+      try {
+        const res = await fetch('/api/flows');
+        if (!res.ok) return;
+        registeredFlows = await res.json();
+        renderFlowsList();
+        if (registeredFlows.length > 0 && !currentFlow) {
+          selectFlow(registeredFlows[0].id);
+        }
+      } catch (e) {
+        console.error('Error fetching flows:', e);
+      }
+    }
+
+    function renderFlowsList() {
+      const container = document.getElementById('flows-list');
+      document.getElementById('flows-count-badge').textContent = registeredFlows.length;
+
+      if (registeredFlows.length === 0) {
+        container.innerHTML = `<div class="text-xs text-slate-500 text-center py-6">No hay flujos registrados aún.<br><span class="text-slate-600 font-mono">uv run flow register ...</span></div>`;
+        return;
+      }
+
+      container.innerHTML = registeredFlows.map(flow => {
+        const isSelected = currentFlow && currentFlow.id === flow.id;
+        const triggerType = flow.trigger ? flow.trigger.type : 'manual';
+        return `
+          <div onclick="selectFlow('${flow.id}')" class="p-3 rounded-lg border transition cursor-pointer ${
+            isSelected 
+              ? 'bg-slate-800/90 border-emerald-500/50 shadow-md ring-1 ring-emerald-500/20' 
+              : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-800/50 hover:border-slate-700'
+          }">
+            <div class="flex items-center justify-between">
+              <span class="font-medium text-xs text-white truncate max-w-[200px]">${escapeHtml(flow.name)}</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                triggerType.includes('webhook') ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' :
+                triggerType.includes('schedule') ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
+                'bg-slate-700/50 text-slate-300'
+              }">
+                ${triggerType}
+              </span>
+            </div>
+            <div class="flex items-center justify-between mt-2 text-[11px] text-slate-400">
+              <span class="font-mono text-slate-500 text-[10px]">${flow.id}</span>
+              <span>${flow.nodes ? flow.nodes.length : 0} nodos • ${flow.edges ? flow.edges.length : 0} aristas</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function selectFlow(flowId) {
+      currentFlow = registeredFlows.find(f => f.id === flowId);
+      if (!currentFlow) return;
+
+      document.getElementById('selected-flow-badge').textContent = currentFlow.id;
+      renderFlowsList();
+      renderDAG(currentFlow);
+    }
+
+    function renderDAG(flow) {
+      document.getElementById('view-flow-name').innerHTML = `<span>${escapeHtml(flow.name)}</span>`;
+      document.getElementById('view-flow-desc').textContent = flow.description || 'Grafo de Automatización Acíclico';
+      
+      const tagsContainer = document.getElementById('view-flow-tags');
+      tagsContainer.innerHTML = `
+        <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">${flow.id}</span>
+        <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">${flow.status || 'active'}</span>
+      `;
+
+      const dag = document.getElementById('dag-container');
+      
+      // Build visual pipeline
+      let html = '';
+      
+      // 1. Trigger Card
+      if (flow.trigger) {
+        html += `
+          <div class="node-card shrink-0 w-52 bg-slate-900 border-2 border-emerald-500/40 rounded-xl p-3 shadow-lg">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-[10px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">Trigger</span>
+              <span class="text-sm">⚡</span>
+            </div>
+            <div class="text-xs font-semibold text-white truncate">${escapeHtml(flow.trigger.name || flow.trigger.id)}</div>
+            <div class="text-[10px] font-mono text-slate-400 mt-1">${flow.trigger.type}</div>
+          </div>
+        `;
+      }
+
+      // Render nodes in sequence / connections
+      if (flow.nodes && flow.nodes.length > 0) {
+        flow.nodes.forEach((node, idx) => {
+          // Arrow indicator
+          html += `
+            <div class="shrink-0 flex items-center justify-center text-slate-600">
+              <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+              </svg>
+            </div>
+          `;
+
+          const nodeColor = getNodeColor(node.type);
+          html += `
+            <div class="node-card shrink-0 w-56 bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-xl p-3 shadow-lg">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[10px] uppercase font-bold tracking-wider ${nodeColor.badge}">${node.type}</span>
+                <span class="text-sm">${getNodeIcon(node.type)}</span>
+              </div>
+              <div class="text-xs font-semibold text-white truncate" title="${escapeHtml(node.name || node.id)}">${escapeHtml(node.name || node.id)}</div>
+              <div class="text-[10px] font-mono text-slate-400 mt-1 truncate">ID: ${node.id}</div>
+              ${node.retry_count ? `<div class="mt-1 text-[10px] text-amber-400">Reintentos: ${node.retry_count}</div>` : ''}
+            </div>
+          `;
+        });
+      }
+
+      dag.innerHTML = html;
+    }
+
+    function getNodeColor(type) {
+      if (type.includes('transform')) return { badge: 'text-indigo-400 bg-indigo-500/10' };
+      if (type.includes('code')) return { badge: 'text-amber-400 bg-amber-500/10' };
+      if (type.includes('http')) return { badge: 'text-blue-400 bg-blue-500/10' };
+      if (type.includes('filter')) return { badge: 'text-yellow-400 bg-yellow-500/10' };
+      if (type.includes('log')) return { badge: 'text-teal-400 bg-teal-500/10' };
+      if (type.includes('iterator') || type.includes('aggregator')) return { badge: 'text-pink-400 bg-pink-500/10' };
+      return { badge: 'text-slate-400 bg-slate-500/10' };
+    }
+
+    function getNodeIcon(type) {
+      if (type.includes('transform')) return '🔄';
+      if (type.includes('code')) return '💻';
+      if (type.includes('http')) return '🌐';
+      if (type.includes('filter')) return '🔍';
+      if (type.includes('log')) return '📝';
+      if (type.includes('iterator')) return '🔁';
+      if (type.includes('aggregator')) return '📦';
+      return '⚙️';
+    }
+
+    async function executeCurrentFlow() {
+      if (!currentFlow) {
+        alert('Por favor selecciona un flujo primero.');
+        return;
+      }
+
+      const btn = document.getElementById('run-btn');
+      const btnText = document.getElementById('run-btn-text');
+      const statusAlert = document.getElementById('run-status-alert');
+      const payloadText = document.getElementById('test-payload').value;
+
+      let payloadJson;
+      try {
+        payloadJson = JSON.parse(payloadText);
+      } catch (err) {
+        statusAlert.className = 'mt-3 text-xs p-2.5 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400';
+        statusAlert.textContent = 'JSON no válido: ' + err.message;
+        statusAlert.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btnText.textContent = 'Ejecutando en el motor...';
+      statusAlert.classList.add('hidden');
+
+      try {
+        const res = await fetch(`/api/flows/${currentFlow.id}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloadJson)
+        });
+
+        const data = await res.json();
+        btn.disabled = false;
+        btnText.textContent = '⚡ Ejecutar Flujo Ahora';
+
+        if (res.ok) {
+          const isSuccess = data.status === 'SUCCESS';
+          statusAlert.className = `mt-3 text-xs p-2.5 rounded-lg border ${
+            isSuccess 
+              ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+              : 'bg-red-500/10 border-red-500/30 text-red-400'
+          }`;
+          statusAlert.innerHTML = `
+            <strong>${isSuccess ? '✅ Éxito' : '❌ Falló'}:</strong> Corrida completada en <strong>${data.duration_ms}ms</strong>.
+            <button onclick="inspectRun('${data.run_id}')" class="underline ml-2 text-white font-medium">Ver auditoría paso a paso</button>
+          `;
+          statusAlert.classList.remove('hidden');
+
+          // Refrescar historial y métricas
+          fetchRuns();
+          fetchStats();
+        } else {
+          statusAlert.className = 'mt-3 text-xs p-2.5 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400';
+          statusAlert.textContent = 'Error al ejecutar: ' + (data.detail || JSON.stringify(data));
+          statusAlert.classList.remove('hidden');
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btnText.textContent = '⚡ Ejecutar Flujo Ahora';
+        statusAlert.className = 'mt-3 text-xs p-2.5 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400';
+        statusAlert.textContent = 'Error de conexión: ' + err.message;
+        statusAlert.classList.remove('hidden');
+      }
+    }
+
+    async function fetchRuns() {
+      try {
+        const res = await fetch('/api/runs?limit=20');
+        if (!res.ok) return;
+        const runs = await res.json();
+        renderRunsTable(runs);
+      } catch (e) {
+        console.error('Error fetching runs:', e);
+      }
+    }
+
+    function renderRunsTable(runs) {
+      const tbody = document.getElementById('runs-table-body');
+      if (!runs || runs.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-slate-500">No hay ejecuciones registradas todavía.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = runs.map(run => {
+        const isSuccess = run.status === 'SUCCESS';
+        const isSkipped = run.status === 'SKIPPED';
+        const statusBadge = isSuccess 
+          ? '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">SUCCESS</span>'
+          : isSkipped 
+          ? '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-700 text-slate-300">SKIPPED</span>'
+          : '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-red-500/10 text-red-400 border border-red-500/20">FAILED</span>';
+
+        const shortId = run.run_id ? run.run_id.substring(0, 8) : '-';
+        const formattedDate = run.started_at ? new Date(run.started_at).toLocaleTimeString() : '-';
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-2.5 px-3 font-mono text-slate-400">${shortId}</td>
+            <td class="py-2.5 px-3 font-medium text-slate-200">${escapeHtml(run.flow_id)}</td>
+            <td class="py-2.5 px-3">${statusBadge}</td>
+            <td class="py-2.5 px-3 font-mono text-slate-300">${run.duration_ms ? run.duration_ms.toFixed(2) + 'ms' : '-'}</td>
+            <td class="py-2.5 px-3 text-slate-400">${formattedDate}</td>
+            <td class="py-2.5 px-3 text-right">
+              <button onclick="inspectRun('${run.run_id}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded text-[11px] font-medium transition">
+                Inspeccionar
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function inspectRun(runId) {
+      try {
+        const res = await fetch(`/api/runs/${runId}`);
+        if (!res.ok) {
+          alert('No se pudo cargar la ejecución: ' + runId);
+          return;
+        }
+        const run = await res.json();
+        
+        document.getElementById('modal-run-id').textContent = run.run_id;
+        document.getElementById('modal-run-meta').textContent = `Flujo: ${run.flow_id} • Estado: ${run.status} • Duración: ${run.duration_ms}ms • ${run.started_at}`;
+        
+        // Trigger Payload
+        document.getElementById('modal-trigger-payload').textContent = JSON.stringify(run.trigger_payload, null, 2);
+
+        // Steps
+        const stepsContainer = document.getElementById('modal-steps-list');
+        const steps = run.step_results || {};
+        
+        if (Object.keys(steps).length === 0) {
+          stepsContainer.innerHTML = `<div class="text-xs text-slate-500 py-3">No hay pasos registrados para esta ejecución.</div>`;
+        } else {
+          stepsContainer.innerHTML = Object.entries(steps).map(([stepId, step]) => {
+            const isOk = step.status === 'SUCCESS';
+            const isSkip = step.status === 'SKIPPED';
+            const borderCol = isOk ? 'border-emerald-500/30 bg-emerald-950/10' : isSkip ? 'border-slate-800 bg-slate-900/50' : 'border-red-500/30 bg-red-950/10';
+            const badgeCol = isOk ? 'text-emerald-400 bg-emerald-500/10' : isSkip ? 'text-slate-400 bg-slate-800' : 'text-red-400 bg-red-500/10';
+
+            return `
+              <div class="border ${borderCol} rounded-lg p-3 text-xs">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="font-bold text-slate-200">${escapeHtml(stepId)}</span>
+                  <div class="flex items-center space-x-2">
+                    <span class="font-mono text-slate-400 text-[11px]">${step.duration_ms ? step.duration_ms.toFixed(2) + 'ms' : '-'}</span>
+                    <span class="px-2 py-0.5 rounded text-[10px] font-semibold ${badgeCol}">${step.status}</span>
+                  </div>
+                </div>
+                ${step.error ? `<div class="mt-1 text-red-400 font-mono text-[11px] bg-red-950/40 p-2 rounded">${escapeHtml(step.error)}</div>` : ''}
+                ${step.output_data ? `
+                  <details class="mt-2 text-[11px]">
+                    <summary class="cursor-pointer text-slate-400 hover:text-slate-200">Ver datos de salida (JSON)</summary>
+                    <pre class="mt-1 bg-slate-950 p-2 rounded border border-slate-800 text-slate-300 font-mono overflow-x-auto max-h-32">${escapeHtml(JSON.stringify(step.output_data, null, 2))}</pre>
+                  </details>
+                ` : ''}
+              </div>
+            `;
+          }).join('');
+        }
+
+        document.getElementById('step-modal').classList.remove('hidden');
+      } catch (err) {
+        console.error('Error inspecting run:', err);
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('step-modal').classList.add('hidden');
+    }
+
+    async function fetchSchedulerTasks() {
+      try {
+        const res = await fetch('/api/scheduler/tasks');
+        if (!res.ok) return;
+        const tasks = await res.json();
+        
+        document.getElementById('scheduler-badge').textContent = tasks.length;
+        const container = document.getElementById('scheduler-tasks-list');
+        
+        if (tasks.length === 0) {
+          container.innerHTML = `<div class="text-slate-500 text-center py-4">No hay tareas periódicas en ejecución.</div>`;
+          return;
+        }
+
+        container.innerHTML = tasks.map(t => `
+          <div class="p-2.5 rounded-lg border border-slate-800 bg-slate-950 flex items-center justify-between">
+            <div>
+              <div class="font-medium text-slate-200">${escapeHtml(t.flow_name)}</div>
+              <div class="text-[10px] font-mono text-slate-400 mt-0.5">Próxima: ${new Date(t.next_run_at).toLocaleTimeString()}</div>
+            </div>
+            <span class="w-2 h-2 rounded-full ${t.is_running ? 'bg-amber-400 animate-ping' : 'bg-emerald-500'}"></span>
+          </div>
+        `).join('');
+      } catch (e) {
+        console.error('Error fetching scheduler tasks:', e);
+      }
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    window.onload = initDashboard;
+  </script>
+</body>
+</html>

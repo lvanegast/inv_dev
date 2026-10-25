@@ -113,3 +113,58 @@ class FlowRepository:
                         }
                     )
                 return results
+
+    async def get_run(self, run_id: str) -> dict[str, Any] | None:
+        """Obtiene una ejecución específica por su ID."""
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)) as cursor,
+        ):
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return {
+                "run_id": row["run_id"],
+                "flow_id": row["flow_id"],
+                "status": row["status"],
+                "started_at": row["started_at"],
+                "finished_at": row["finished_at"],
+                "duration_ms": row["duration_ms"],
+                "trigger_payload": json.loads(row["trigger_payload_json"] or "{}"),
+                "step_results": json.loads(row["step_results_json"] or "{}"),
+                "error": row["error"],
+            }
+
+    async def get_stats(self) -> dict[str, Any]:
+        """Obtiene métricas y estadísticas globales para el Dashboard."""
+        async with self.db_manager.get_connection() as db:
+            async with db.execute("SELECT COUNT(*) as count FROM flows") as cursor:
+                row = await cursor.fetchone()
+                total_flows = row["count"] if row else 0
+
+            async with db.execute(
+                """
+                SELECT
+                    COUNT(*) as total_runs,
+                    SUM(CASE WHEN LOWER(status) = 'success' THEN 1 ELSE 0 END) as success_runs,
+                    SUM(CASE WHEN LOWER(status) = 'failed' THEN 1 ELSE 0 END) as failed_runs,
+                    AVG(duration_ms) as avg_duration_ms
+                FROM runs
+                """
+            ) as cursor:
+                row = await cursor.fetchone()
+                total_runs = row["total_runs"] if row and row["total_runs"] else 0
+                success_runs = row["success_runs"] if row and row["success_runs"] else 0
+                failed_runs = row["failed_runs"] if row and row["failed_runs"] else 0
+                avg_duration_ms = round(row["avg_duration_ms"] or 0.0, 2) if row else 0.0
+
+            success_rate = round((success_runs / total_runs) * 100, 1) if total_runs > 0 else 100.0
+
+            return {
+                "total_flows": total_flows,
+                "total_runs": total_runs,
+                "success_runs": success_runs,
+                "failed_runs": failed_runs,
+                "avg_duration_ms": avg_duration_ms,
+                "success_rate": success_rate,
+            }

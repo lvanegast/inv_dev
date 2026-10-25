@@ -144,7 +144,7 @@ def serve(
         os.environ["FLOWENGINE_ENABLE_SCHEDULER"] = "true"
         console.print("[bold yellow]⏰ Scheduler en segundo plano habilitado.[/bold yellow]")
 
-    console.print(f"[bold green]Iniciando FlowEngine Webhook Server en http://{host}:{port}[/bold green]")
+    console.print(f"[bold green]🚀 FlowEngine Server & Web Dashboard activo en http://{host}:{port}/dashboard[/bold green]")
     uvicorn.run("flowengine.server.app:app", host=host, port=port, reload=reload)
 
 

@@ -68,3 +68,16 @@ async def test_repository_save_and_list_runs(tmp_path: Path):
     assert len(runs) == 1
     assert runs[0]["flow_id"] == "flow_abc"
     assert runs[0]["status"] == "success"
+
+    # Probar get_run
+    run_detail = await repo.get_run(run.run_id)
+    assert run_detail is not None
+    assert run_detail["run_id"] == run.run_id
+    assert run_detail["trigger_payload"] == {"hello": "world"}
+
+    # Probar get_stats
+    stats = await repo.get_stats()
+    assert stats["total_flows"] == 1
+    assert stats["total_runs"] == 1
+    assert stats["success_runs"] == 1
+    assert stats["success_rate"] == 100.0
