@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-49%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-55%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -135,9 +135,37 @@ uv run flow serve --port 8000 --with-scheduler
 
 ---
 
+## 🔐 Seguridad y Verificación Criptográfica de Webhooks
+
+FlowEngine protege los endpoints de webhooks con verificación criptográfica de firma **HMAC-SHA256**, compatible con los estándares de **Stripe, GitHub, Shopify y Slack**:
+
+```yaml
+trigger:
+  id: stripe_trigger
+  type: trigger_webhook
+  config:
+    auth:
+      type: hmac_sha256
+      secret: "{{env.STRIPE_WEBHOOK_SECRET}}"  # Variable de entorno — nunca en texto plano
+      header: "Stripe-Signature"               # Cabecera donde viene la firma
+      signature_prefix: ""                     # Prefijo a ignorar antes del hex (ej. "sha256=")
+```
+
+También soporta autenticación **Bearer Token** y **Basic Auth**:
+```yaml
+config:
+  auth:
+    type: bearer
+    token: "{{env.API_SECRET_TOKEN}}"
+```
+
+Las firmas se verifican en **tiempo constante** (`hmac.compare_digest`) para prevenir timing attacks. Llamadas sin firma válida reciben `401 Unauthorized` antes de ejecutar un solo nodo.
+
+---
+
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 49 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite de 55 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest

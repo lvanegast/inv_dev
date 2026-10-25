@@ -14,6 +14,7 @@ from flowengine.core.models import (
 )
 from flowengine.core.runner import FlowRunner
 from flowengine.core.scheduler import SchedulerService, compute_next_run, match_cron
+from flowengine.core.security import compute_hmac_sha256, verify_webhook_auth, verify_webhook_signature
 
 __all__ = [
     "DAGGraph",
@@ -29,8 +30,11 @@ __all__ = [
     "SafeConditionEvaluator",
     "SchedulerService",
     "StepResult",
+    "compute_hmac_sha256",
     "compute_next_run",
     "get_nested_value",
     "match_cron",
     "resolve_expression",
+    "verify_webhook_auth",
+    "verify_webhook_signature",
 ]

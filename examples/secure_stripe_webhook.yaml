@@ -1,0 +1,51 @@
+id: stripe-payment-webhook
+name: "Procesador de Pagos con Seguridad HMAC-SHA256 (Estilo Stripe)"
+description: "Flujo protegido con firma criptográfica HMAC-SHA256. Solo procesa eventos de pago autenticados por Stripe."
+status: active
+
+trigger:
+  id: stripe_trigger
+  name: "Stripe Webhook (Protegido con HMAC)"
+  type: trigger_webhook
+  config:
+    auth:
+      type: hmac_sha256
+      secret: "{{env.STRIPE_WEBHOOK_SECRET}}"   # Nunca hardcoded
+      header: "Stripe-Signature"
+      signature_prefix: ""                      # Stripe usa formato: t=...,v1=<hex>
+                                                # (ajustar si se pre-procesa la cabecera)
+
+nodes:
+  - id: route_event
+    name: "Router: Tipo de Evento"
+    type: action_filter
+    config:
+      condition: "{{trigger.body.type}} == 'payment_intent.succeeded'"
+
+  - id: format_receipt
+    name: "Transformar: Recibo de Pago"
+    type: action_transform
+    config:
+      output:
+        event_id:    "{{trigger.body.id}}"
+        customer:    "{{trigger.body.data.object.customer}}"
+        amount:      "{{round(trigger.body.data.object.amount / 100.0, 2)}}"
+        currency:    "{{upper(trigger.body.data.object.currency)}}"
+        processed_at: "{{now()}}"
+
+  - id: log_success
+    name: "Logger: Pago Confirmado"
+    type: action_log
+    config:
+      level: info
+      message: "[PAGO] Cliente {{format_receipt.customer}} pagó {{format_receipt.amount}} {{format_receipt.currency}} (Event: {{format_receipt.event_id}})"
+
+edges:
+  - source: stripe_trigger
+    target: route_event
+
+  - source: route_event
+    target: format_receipt
+
+  - source: format_receipt
+    target: log_success

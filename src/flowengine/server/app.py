@@ -1,5 +1,6 @@
 """Servidor FastAPI de Ingestión de Webhooks y API de FlowEngine."""
 
+import json
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -12,6 +13,7 @@ from fastapi.responses import HTMLResponse
 from flowengine.core.models import FlowDefinition
 from flowengine.core.runner import FlowRunner
 from flowengine.core.scheduler import SchedulerService
+from flowengine.core.security import verify_webhook_auth
 from flowengine.storage.repository import FlowRepository
 
 # Repositorio y Scheduler globales del servidor
@@ -71,14 +73,31 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
             detail=f"Flujo con ID '{flow_id}' no encontrado en el sistema.",
         )
 
-    # Extraer payload, headers y parámetros
-    try:
-        body = await request.json()
-    except Exception:
-        body = (await request.body()).decode("utf-8", errors="replace")
-
+    # Extraer cuerpo sin procesar (bytes)
+    raw_body_bytes = await request.body()
     headers = dict(request.headers)
     query_params = dict(request.query_params)
+
+    # Verificar autenticación o firma HMAC si está configurada en el trigger
+    trigger_config = flow.trigger.config if flow.trigger else {}
+    auth_config = trigger_config.get("auth")
+    if auth_config:
+        is_valid, auth_msg = verify_webhook_auth(
+            auth_config=auth_config,
+            headers=headers,
+            payload_bytes=raw_body_bytes,
+        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=401,
+                detail=f"Firma o autenticación de Webhook inválida: {auth_msg}",
+            )
+
+    # Parsear payload JSON
+    try:
+        body = json.loads(raw_body_bytes.decode("utf-8")) if raw_body_bytes else {}
+    except Exception:
+        body = raw_body_bytes.decode("utf-8", errors="replace")
 
     trigger_payload = {
         "body": body,
