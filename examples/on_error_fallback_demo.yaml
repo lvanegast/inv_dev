@@ -1,0 +1,59 @@
+id: on-error-fallback-demo
+name: "Demostración de Ramas de Respaldo (On Error Fallback)"
+description: "Flujo que demuestra la rama de error: si el paso HTTP falla, se activa la notificación de alerta."
+status: active
+
+trigger:
+  id: http_trigger
+  name: "Disparador Manual"
+  type: trigger_manual
+
+nodes:
+  - id: call_payment_api
+    name: "HTTP: Llamar API de Pago"
+    type: action_http
+    retry_count: 0
+    config:
+      method: GET
+      url: "https://httpstat.us/503"   # Siempre devuelve 503 para simular el fallo
+
+  - id: notify_success
+    name: "Logger: Pago Procesado Exitosamente"
+    type: action_log
+    config:
+      level: info
+      message: "[OK] Pago procesado con éxito."
+
+  - id: notify_error
+    name: "Logger: ALERTA — Fallo en API de Pago"
+    type: action_log
+    config:
+      level: info
+      message: "[ALERTA] El nodo 'call_payment_api' falló. Se activa la rama de rescate."
+
+  - id: cleanup
+    name: "Logger: Limpieza Final (siempre ejecuta)"
+    type: action_log
+    config:
+      level: info
+      message: "[CLEANUP] Proceso finalizado (exitoso o con error)."
+
+edges:
+  - source: http_trigger
+    target: call_payment_api
+
+  # Rama de ÉXITO
+  - source: call_payment_api
+    target: notify_success
+    on_error: false
+
+  # Rama de ERROR — on_error: true
+  - source: call_payment_api
+    target: notify_error
+    on_error: true
+
+  # Convergencia: cleanup se ejecuta SIEMPRE (tanto tras éxito como tras error)
+  - source: notify_success
+    target: cleanup
+  - source: notify_error
+    target: cleanup

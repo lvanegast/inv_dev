@@ -230,4 +230,9 @@ class FlowRunner:
         )
         run.step_results[node_id] = step_res
         context[f"__node_status_{node_id}"] = "failed"
+        # Inyectar información del error para expresiones en ramas on_error
+        context[node_id] = {
+            "__error__": error_msg,
+            "__error_type__": type(last_error).__name__,
+        }
         return node_id, NodeStatus.FAILED

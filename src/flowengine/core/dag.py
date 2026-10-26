@@ -87,27 +87,44 @@ class DAGGraph:
 
         Regla de Router/Bifurcación:
         - Si es el trigger (sin aristas entrantes), siempre se ejecuta.
-        - Si tiene aristas entrantes: se ejecuta si al menos una arista entrante se satisfizo.
+        - Si tiene aristas normales (on_error=False): se ejecuta si al menos una arista de éxito se satisfizo.
+        - Si tiene aristas de error (on_error=True): se ejecuta si el nodo padre FALLÓ.
+        - Un nodo puede tener tanto aristas normales como de error (es un nodo de consolidación).
         """
         incoming = self.incoming_edges.get(node_id, [])
         if not incoming:
             return True, None
 
-        for edge in incoming:
+        normal_edges = [e for e in incoming if not e.on_error]
+        error_edges = [e for e in incoming if e.on_error]
+
+        # Comprobar aristas de éxito normales
+        for edge in normal_edges:
             source_status = context.get(f"__node_status_{edge.source}")
-            # Si el nodo padre fue saltado o falló, no podemos satisfacer a través de este enlace
             if source_status != "success":
                 continue
-
             if not edge.condition:
                 return True, None
-
-            # Evaluar condición de la arista
             condition_met = SafeConditionEvaluator.evaluate(edge.condition, context)
             if condition_met:
                 return True, None
 
-        return False, f"Ninguna condición de entrada se cumplió para el nodo '{node_id}'."
+        # Comprobar aristas "on_error" — se activan si el padre FALLÓ
+        for edge in error_edges:
+            source_status = context.get(f"__node_status_{edge.source}")
+            if source_status == "failed":
+                return True, None
+
+        skip_reason = f"Ninguna condición de entrada se cumplió para el nodo '{node_id}'."
+        return False, skip_reason
+
+    def get_error_fallback_nodes(self, node_id: str) -> list[str]:
+        """Devuelve los IDs de nodos destino conectados con on_error=True desde node_id."""
+        return [
+            edge.target
+            for edge in self.outgoing_edges.get(node_id, [])
+            if edge.on_error
+        ]
 
     def find_loop_block(self, iterator_id: str) -> tuple[list[str], str | None]:
         """Encuentra los nodos que pertenecen al bucle entre un Iterator y su Aggregator.

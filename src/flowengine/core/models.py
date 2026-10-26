@@ -50,6 +50,13 @@ class EdgeDefinition(BaseModel):
         default=None,
         description="Expresión condicional para seguir este camino (ej. '{{paso_1.status}} == 200')",
     )
+    on_error: bool = Field(
+        default=False,
+        description=(
+            "Si es True, esta arista se activa SOLO cuando el nodo origen FALLA (rama de rescate). "
+            "Si es False (default), se activa en el flujo normal de éxito."
+        ),
+    )
 
 
 class FlowDefinition(BaseModel):
