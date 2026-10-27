@@ -8,10 +8,17 @@ import typer
 import uvicorn
 import yaml
 
-from flowengine.cli.visualizer import console, print_flow_tree, print_run_result, print_runs_history
+from flowengine.cli.visualizer import (
+    console,
+    print_available_nodes,
+    print_flow_tree,
+    print_run_result,
+    print_runs_history,
+)
 from flowengine.core.dag import DAGGraph, DAGValidationError
 from flowengine.core.models import FlowDefinition
 from flowengine.core.runner import FlowRunner
+from flowengine.nodes.registry import list_available_nodes
 from flowengine.storage.repository import FlowRepository
 
 app = typer.Typer(
@@ -172,6 +179,33 @@ def schedule():
 
     with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(_run())
+
+
+@app.command(name="nodes")
+def list_nodes():
+    """Lista todos los nodos integrados y plugins externos registrados."""
+    nodes = list_available_nodes()
+    print_available_nodes(nodes)
+
+
+@app.command(name="openapi")
+def export_openapi(
+    path: Path = typer.Argument(..., help="Ruta al archivo del flujo (.yaml o .json)"),
+    output: Path | None = typer.Option(
+        None, "--output", "-o", help="Ruta del archivo JSON de destino (opcional)"
+    ),
+):
+    """Genera la especificación OpenAPI 3.1 para el Webhook del flujo."""
+    flow = load_flow_from_file(path)
+    from flowengine.server.openapi import generate_flow_openapi
+
+    spec = generate_flow_openapi(flow)
+    spec_json = json.dumps(spec, indent=2, ensure_ascii=False)
+    if output:
+        output.write_text(spec_json, encoding="utf-8")
+        console.print(f"[bold green][OK] Contrato OpenAPI guardado exitosamente en: {output}[/bold green]")
+    else:
+        typer.echo(spec_json)
 
 
 if __name__ == "__main__":

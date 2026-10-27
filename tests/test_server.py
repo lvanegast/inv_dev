@@ -135,3 +135,17 @@ async def test_dashboard_api_endpoints(tmp_path: Path):
         stats_updated = resp_stats_updated.json()
         assert stats_updated["total_runs"] == 1
         assert stats_updated["success_runs"] == 1
+
+
+@pytest.mark.asyncio
+async def test_server_nodes_catalog():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.get("/api/nodes")
+        assert resp.status_code == 200
+        nodes = resp.json()
+        assert isinstance(nodes, list)
+        types = [n["type"] for n in nodes]
+        assert "trigger_webhook" in types
+        assert "action_http" in types
+        assert "action_iterator" in types

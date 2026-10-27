@@ -2,6 +2,7 @@
 
 import contextlib
 import sys
+from typing import Any
 
 from rich.console import Console
 from rich.panel import Panel
@@ -117,6 +118,40 @@ def print_runs_history(runs: list[dict]) -> None:
             st_formatted,
             r.get("started_at", "")[:19],
             f"{r.get('duration_ms', 0):.2f}ms",
+        )
+
+    console.print(table)
+
+
+def print_available_nodes(nodes: list[dict[str, Any]]) -> None:
+    """Muestra el catálogo de nodos y plugins registrados en una tabla."""
+    table = Table(
+        title="Catálogo de Nodos y Plugins de FlowEngine",
+        show_lines=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Tipo (type)", style="bold yellow")
+    table.add_column("Categoría", justify="center")
+    table.add_column("Origen", justify="center")
+    table.add_column("Clase Python", style="dim")
+    table.add_column("Descripción")
+
+    for n in nodes:
+        origin = "[blue]Incorporado[/blue]" if n.get("is_builtin") else "[bold magenta]Plugin[/bold magenta]"
+        cat = n.get("category", "")
+        if cat == "trigger":
+            cat_fmt = "[bold yellow]TRIGGER[/bold yellow]"
+        elif cat == "batch":
+            cat_fmt = "[cyan]BATCH[/cyan]"
+        else:
+            cat_fmt = "[green]ACTION[/green]"
+
+        table.add_row(
+            n.get("type", ""),
+            cat_fmt,
+            origin,
+            n.get("class_name", ""),
+            n.get("description", ""),
         )
 
     console.print(table)

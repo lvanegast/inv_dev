@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-55%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-81%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -79,20 +79,86 @@ curl -X POST http://127.0.0.1:8000/webhook/order-processing-zap \
 
 ---
 
-## 🛠️ Catálogo de Nodos Disponibles
+## 🛠️ Catálogo de Nodos y Sistema de Plugins
 
-| Tipo de Nodo | Categoría | Descripción |
-| :--- | :--- | :--- |
-| `trigger_webhook` | Trigger | Despierta el flujo al recibir una llamada HTTP POST/GET externa. |
-| `trigger_manual` | Trigger | Disparo manual por CLI o scripts. |
-| `trigger_schedule` | Trigger | Temporizador basado en intervalos o cron. |
-| `action_http` | Acción | Llamadas HTTP asíncronas (GET, POST, PUT, DELETE) con autenticación Bearer/Basic. |
-| `action_filter` | Acción | Filtro condicional (*Only continue if...*). |
-| `action_transform` | Acción | Mapeo y formateo de estructuras de datos JSON. |
-| `action_code` | Acción | Ejecución de funciones de transformación personalizadas en Python. |
-| `action_log` | Acción | Registro de eventos y alertas formateadas en consola. |
-| `action_iterator` | Lotes | Desempaqueta un array para ejecutar pasos posteriores por cada elemento (`{{item}}`). |
-| `action_aggregator` | Lotes | Agrupa y consolida los resultados del bucle (sumatorias, listas, conteos). |
+FlowEngine incluye nodos esenciales listos para producción y un **Registro Dinámico de Plugins** extensible mediante `register_node` o a través de `entry-points` de Python (`flowengine.nodes`):
+
+```powershell
+# Inspeccionar todos los nodos integrados y plugins instalados
+uv run flow nodes
+```
+
+| Tipo de Nodo | Categoría | Origen | Descripción |
+| :--- | :--- | :--- | :--- |
+| `trigger_webhook` | Trigger | Incorporado | Despierta el flujo al recibir una llamada HTTP POST/GET externa. |
+| `trigger_manual` | Trigger | Incorporado | Disparo manual por CLI o scripts. |
+| `trigger_schedule` | Trigger | Incorporado | Temporizador basado en intervalos o expresiones cron. |
+| `action_http` | Acción | Incorporado | Llamadas HTTP asíncronas (GET, POST, PUT, DELETE) con autenticación Bearer/Basic. |
+| `action_filter` | Acción | Incorporado | Filtro condicional (*Only continue if...*). |
+| `action_transform` | Acción | Incorporado | Mapeo y formateo de estructuras de datos JSON. |
+| `action_code` | Acción | Incorporado | Ejecución de funciones de transformación personalizadas en Python. |
+| `action_log` | Acción | Incorporado | Registro de eventos y alertas formateadas en consola. |
+| `action_iterator` | Lotes | Incorporado | Desempaqueta un array para ejecutar pasos posteriores por cada elemento (`{{item}}`). |
+| `action_aggregator` | Lotes | Incorporado | Agrupa y consolida los resultados del bucle (sumatorias, listas, conteos). |
+| `* (plugins)` | Variable | Externo | Nodos desarrollados por terceros registrados dinámicamente. |
+
+### Cómo Crear un Plugin Personalizado
+Los paquetes externos o módulos locales pueden definir nodos heredando de `BaseNode`:
+```python
+from flowengine.nodes.base import BaseNode
+from flowengine.nodes.registry import register_node
+
+class DiscordNotifier(BaseNode):
+    async def execute(self, context: dict) -> dict:
+        cfg = self.resolve_config(context)
+        return {"delivered": True, "message": cfg.get("content")}
+
+register_node("action_discord", DiscordNotifier)
+```
+
+O vía `pyproject.toml` usando entrypoints estándar:
+```toml
+[project.entry-points."flowengine.nodes"]
+action_discord = "mi_paquete.discord:DiscordNotifier"
+```
+
+---
+
+## 🛡️ Ramas de Respaldo ante Fallos ("On Error" Branches)
+
+FlowEngine soporta bifurcaciones de rescate en el DAG mediante el atributo `on_error: true` en las aristas:
+
+```yaml
+edges:
+  - source: api_pago
+    target: enviar_recibo
+    on_error: false        # Rama de éxito
+
+  - source: api_pago
+    target: alertar_soporte_slack
+    on_error: true         # Se activa si 'api_pago' falla o agota sus reintentos
+```
+
+Cuando un nodo falla, el contexto de los nodos de rescate recibe automáticamente el objeto `{{error}}` con el detalle del error y el nodo origen para auditoría inmediata.
+
+---
+
+## 📜 Especificación OpenAPI 3.1 Automática por Flujo
+
+Cada webhook registrado cuenta con su propio contrato OpenAPI 3.1 generado en tiempo real con documentación de esquemas, parámetros y autenticación HMAC/Bearer:
+
+```powershell
+# Generar contrato OpenAPI 3.1 desde la terminal
+uv run flow openapi examples/secure_stripe_webhook.yaml
+
+# O exportar a un archivo JSON
+uv run flow openapi examples/secure_stripe_webhook.yaml -o stripe_api.json
+```
+
+Con el servidor en ejecución (`flow serve`), cada flujo expone:
+* **Especificación JSON:** `GET /api/flows/{flow_id}/openapi.json`
+* **Swagger UI Interactivo Dedicado:** `GET /api/flows/{flow_id}/docs`
+* **Catálogo Global de Nodos:** `GET /api/nodes`
 
 ---
 

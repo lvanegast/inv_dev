@@ -8,12 +8,15 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse
 
 from flowengine.core.models import FlowDefinition
 from flowengine.core.runner import FlowRunner
 from flowengine.core.scheduler import SchedulerService
 from flowengine.core.security import verify_webhook_auth
+from flowengine.nodes.registry import list_available_nodes
+from flowengine.server.openapi import generate_flow_openapi
 from flowengine.storage.repository import FlowRepository
 
 # Repositorio y Scheduler globales del servidor
@@ -129,6 +132,12 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
     }
 
 
+@app.get("/api/nodes")
+async def list_registered_nodes() -> list[dict[str, Any]]:
+    """Retorna el catálogo completo de nodos disponibles (incorporados y plugins externos)."""
+    return list_available_nodes()
+
+
 @app.get("/api/flows")
 async def list_flows() -> list[FlowDefinition]:
     return await repo.list_flows()
@@ -144,6 +153,34 @@ async def get_flow(flow_id: str) -> FlowDefinition:
             detail=f"Flujo con ID '{flow_id}' no encontrado.",
         )
     return flow
+
+
+@app.get("/api/flows/{flow_id}/openapi.json")
+async def get_flow_openapi_spec(flow_id: str, request: Request) -> dict[str, Any]:
+    """Retorna la especificación OpenAPI 3.1 generada específicamente para este flujo."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Flujo con ID '{flow_id}' no encontrado.",
+        )
+    base_url = str(request.base_url).rstrip("/")
+    return generate_flow_openapi(flow, server_url=base_url)
+
+
+@app.get("/api/flows/{flow_id}/docs", response_class=HTMLResponse)
+async def get_flow_swagger_docs(flow_id: str, request: Request) -> HTMLResponse:
+    """Proporciona documentación Swagger UI interactiva exclusiva para este flujo."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Flujo con ID '{flow_id}' no encontrado.",
+        )
+    return get_swagger_ui_html(
+        openapi_url=f"/api/flows/{flow_id}/openapi.json",
+        title=f"{flow.name} - Documentación de Webhook",
+    )
 
 
 @app.post("/api/flows")
