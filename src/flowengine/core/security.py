@@ -7,6 +7,34 @@ from typing import Any
 
 from flowengine.core.expressions import resolve_expression
 
+SENSITIVE_KEY_PATTERNS = {
+    "password",
+    "secret",
+    "token",
+    "api_key",
+    "apikey",
+    "authorization",
+    "auth_bearer",
+    "private_key",
+    "client_secret",
+}
+
+
+def mask_sensitive_data(data: Any) -> Any:
+    """Enmascara recursivamente credenciales y secretos en diccionarios y listas para auditoría segura."""
+    if isinstance(data, dict):
+        masked = {}
+        for k, v in data.items():
+            k_lower = str(k).lower()
+            if any(pattern in k_lower for pattern in SENSITIVE_KEY_PATTERNS):
+                masked[k] = "******"
+            else:
+                masked[k] = mask_sensitive_data(v)
+        return masked
+    if isinstance(data, list):
+        return [mask_sensitive_data(item) for item in data]
+    return data
+
 
 def compute_hmac_sha256(payload: bytes | str, secret: str) -> str:
     """Calcula la firma HMAC-SHA256 en formato hexadecimal."""

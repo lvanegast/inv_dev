@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-81%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-92%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -227,11 +227,21 @@ config:
 
 Las firmas se verifican en **tiempo constante** (`hmac.compare_digest`) para prevenir timing attacks. Llamadas sin firma válida reciben `401 Unauthorized` antes de ejecutar un solo nodo.
 
+### Mitigaciones de Seguridad y Rendimiento
+* **Aislamiento AST en `action_code`:** Bloqueo en tiempo de compilación AST contra `import`, acceso a introspección MRO (`__class__`, `__subclasses__`), builtins peligrosos (`eval`, `exec`, `open`) y bucles infinitos no acotados (`while`).
+* **Protección contra Inyección de Plantillas:** Bloqueo de atributos dunder (`__*`) en la evaluación de expresiones `{{...}}`.
+* **Enmascaramiento de Secretos (`mask_sensitive_data`):** Redacción automática de passwords, tokens y API keys (`******`) en los logs persistentes de auditoría y trazas de auditoría.
+* **Protección DoS por Payloads Masivos:** Rechazo inmediato con `413 Payload Too Large` ante webhooks entrantes que superen el límite configurable (10 MB por defecto).
+* **Ejecución Paralela de Ramas en DAG:** Los nodos dentro de la misma capa topológica se ejecutan concurrentemente con `asyncio.gather`.
+* **Connection Pooling HTTP:** Pool persistente con keep-alive en `action_http` (`httpx.Limits`) reduciendo latencias de handshake TCP/TLS.
+* **Caché LRU en Expresiones:** Cacheo en memoria de árboles sintácticos AST de expresiones recurrentes.
+* **Índices SQLite Optimizados:** B-Trees dedicados para ordenación y filtrado temporal de ejecuciones.
+
 ---
 
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 55 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite de 92 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest

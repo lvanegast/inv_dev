@@ -15,6 +15,7 @@ from flowengine.core.models import FlowDefinition
 from flowengine.core.runner import FlowRunner
 from flowengine.core.scheduler import SchedulerService
 from flowengine.core.security import verify_webhook_auth
+from flowengine.nodes.actions_http import close_shared_http_client
 from flowengine.nodes.registry import list_available_nodes
 from flowengine.server.openapi import generate_flow_openapi
 from flowengine.storage.repository import FlowRepository
@@ -24,6 +25,7 @@ repo = FlowRepository()
 scheduler = SchedulerService(repo)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+MAX_WEBHOOK_PAYLOAD_BYTES = int(os.getenv("FLOWENGINE_MAX_BODY_BYTES", 10 * 1024 * 1024))
 
 
 @asynccontextmanager
@@ -35,6 +37,7 @@ async def lifespan(app: FastAPI):
     yield
     if scheduler._running:
         await scheduler.stop()
+    await close_shared_http_client()
 
 
 app = FastAPI(
@@ -76,8 +79,21 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
             detail=f"Flujo con ID '{flow_id}' no encontrado en el sistema.",
         )
 
+    max_mb = MAX_WEBHOOK_PAYLOAD_BYTES // (1024 * 1024)
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_WEBHOOK_PAYLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Cuerpo de la petición demasiado grande (máximo {max_mb} MB).",
+        )
+
     # Extraer cuerpo sin procesar (bytes)
     raw_body_bytes = await request.body()
+    if len(raw_body_bytes) > MAX_WEBHOOK_PAYLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Cuerpo de la petición demasiado grande (máximo {max_mb} MB).",
+        )
     headers = dict(request.headers)
     query_params = dict(request.query_params)
 

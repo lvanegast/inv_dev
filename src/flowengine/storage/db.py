@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS runs (
 
 CREATE INDEX IF NOT EXISTS idx_runs_flow_id ON runs(flow_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
+CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_runs_flow_started ON runs(flow_id, started_at DESC);
 """
 
 

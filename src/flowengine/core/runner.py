@@ -13,6 +13,7 @@ from flowengine.core.models import (
     RunStatus,
     StepResult,
 )
+from flowengine.core.security import mask_sensitive_data
 from flowengine.nodes.registry import create_node_instance
 
 logger = logging.getLogger("flowengine.runner")
@@ -57,16 +58,26 @@ class FlowRunner:
             if not nodes_to_run:
                 continue
 
-            for node_id in nodes_to_run:
-                node_def = self.dag.nodes_by_id[node_id]
-                if node_def.type == "action_iterator":
-                    status = await self._execute_iterator_loop(node_id, context, run, handled_in_loop)
+            has_iterator = any(self.dag.nodes_by_id[nid].type == "action_iterator" for nid in nodes_to_run)
+
+            if len(nodes_to_run) > 1 and not has_iterator:
+                # Ejecución concurrente y paralela de ramas independientes del DAG
+                tasks = [self._execute_node_safe(node_id, context, run) for node_id in nodes_to_run]
+                batch_results = await asyncio.gather(*tasks)
+                for _, status in batch_results:
                     if status == NodeStatus.FAILED:
                         any_failed = True
-                else:
-                    _, status = await self._execute_node_safe(node_id, context, run)
-                    if status == NodeStatus.FAILED:
-                        any_failed = True
+            else:
+                for node_id in nodes_to_run:
+                    node_def = self.dag.nodes_by_id[node_id]
+                    if node_def.type == "action_iterator":
+                        status = await self._execute_iterator_loop(node_id, context, run, handled_in_loop)
+                        if status == NodeStatus.FAILED:
+                            any_failed = True
+                    else:
+                        _, status = await self._execute_node_safe(node_id, context, run)
+                        if status == NodeStatus.FAILED:
+                            any_failed = True
 
         run.finished_at = datetime.now(UTC)
         if any_failed:
@@ -191,7 +202,7 @@ class FlowRunner:
                     started_at=started_at,
                     finished_at=finished_at,
                     duration_ms=duration_ms,
-                    input_data=node_instance.resolve_config(context),
+                    input_data=mask_sensitive_data(node_instance.resolve_config(context)),
                     output_data=output,
                 )
                 run.step_results[node_id] = step_res
@@ -224,7 +235,7 @@ class FlowRunner:
             started_at=started_at,
             finished_at=finished_at,
             duration_ms=duration_ms,
-            input_data=node_instance.resolve_config(context),
+            input_data=mask_sensitive_data(node_instance.resolve_config(context)),
             output_data=None,
             error=error_msg,
         )

@@ -5,9 +5,20 @@ import json
 import os
 import re
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import Any
 
 EXPRESSION_PATTERN = re.compile(r"\{\{\s*([^{}]+?)\s*\}\}")
+ARRAY_INDEX_PATTERN = re.compile(r"\[(\d+)\]")
+SIMPLE_PATH_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+(\[[0-9]+\])*$")
+CONTAINS_PATTERN = re.compile(r"(\S+)\s+contains\s+(\S+)", re.IGNORECASE)
+IS_EMPTY_PATTERN = re.compile(r"(\S+)\s+is_empty", re.IGNORECASE)
+
+
+@lru_cache(maxsize=1024)
+def _get_cached_ast_eval(expr: str) -> ast.Expression:
+    """Parsea y cachea árboles AST para expresiones eval repetidas."""
+    return ast.parse(expr, mode="eval")
 
 
 def _slugify(text: Any) -> str:
@@ -87,13 +98,16 @@ def get_nested_value(data: Any, path: str) -> Any:
         return None
 
     # Normalizar notación array `items[0]` a `items.0`
-    normalized_path = re.sub(r"\[(\d+)\]", r".\1", path)
+    normalized_path = ARRAY_INDEX_PATTERN.sub(r".\1", path)
     tokens = normalized_path.split(".")
 
     current = data
     for token in tokens:
         if token == "":
             continue
+        # Seguridad: Bloquear acceso a atributos dunder/privados para evitar escapes de sandbox
+        if token.startswith("__"):
+            return None
         if isinstance(current, dict):
             current = current.get(token)
         elif isinstance(current, (list, tuple)):
@@ -135,13 +149,17 @@ def _eval_ast_expression(node: ast.AST, context: dict[str, Any]) -> Any:
         return None
 
     if isinstance(node, ast.Attribute):
-        # Maneja accesos tipo user.name o env.KEY
+        # Maneja accesos tipo user.name o env.KEY bloqueando atributos dunder
         parts = []
         curr: ast.AST = node
         while isinstance(curr, ast.Attribute):
+            if curr.attr.startswith("__"):
+                raise ValueError(f"Acceso a atributo no seguro '{curr.attr}' bloqueado.")
             parts.append(curr.attr)
             curr = curr.value
         if isinstance(curr, ast.Name):
+            if curr.id.startswith("__"):
+                raise ValueError(f"Acceso a identificador no seguro '{curr.id}' bloqueado.")
             parts.append(curr.id)
             parts.reverse()
             full_path = ".".join(parts)
@@ -217,12 +235,12 @@ def evaluate_expression_string(expr_str: str, context: dict[str, Any]) -> Any:
         return ""
 
     # Si es una ruta simple (sin paréntesis ni operadores aritméticos)
-    if re.fullmatch(r"^[A-Za-z0-9_.-]+(\[[0-9]+\])*$", expr):
+    if SIMPLE_PATH_PATTERN.fullmatch(expr):
         return get_nested_value(context, expr)
 
     # Si tiene funciones, operadores o parámetros
     try:
-        tree = ast.parse(expr, mode="eval")
+        tree = _get_cached_ast_eval(expr)
         return _eval_ast_expression(tree.body, context)
     except Exception:
         # Fallback a búsqueda simple si el parseo falla
@@ -288,19 +306,9 @@ class SafeConditionEvaluator:
 
         expr = condition_expr.strip()
 
-        # Reemplazar operadores intuitivos
-        expr = re.sub(
-            r"(\S+)\s+contains\s+(\S+)",
-            r"\2 in \1",
-            expr,
-            flags=re.IGNORECASE,
-        )
-        expr = re.sub(
-            r"(\S+)\s+is_empty",
-            r"len(\1) == 0",
-            expr,
-            flags=re.IGNORECASE,
-        )
+        # Reemplazar operadores intuitivos usando patrones precompilados
+        expr = CONTAINS_PATTERN.sub(r"\2 in \1", expr)
+        expr = IS_EMPTY_PATTERN.sub(r"len(\1) == 0", expr)
 
         def repl(match: re.Match) -> str:
             path = match.group(1).strip()
