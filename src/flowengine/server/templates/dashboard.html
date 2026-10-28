@@ -77,6 +77,10 @@
           <span class="text-slate-400">Promedio:</span>
           <span id="stat-avg" class="font-bold text-cyan-400 ml-1">0ms</span>
         </div>
+        <div>
+          <span class="text-slate-400">DLQ:</span>
+          <span id="stat-dlq" class="font-bold text-amber-400 ml-1">0</span>
+        </div>
       </div>
 
       <div class="flex items-center space-x-3">
@@ -318,6 +322,7 @@
         document.getElementById('stat-runs').textContent = data.total_runs;
         document.getElementById('stat-rate').textContent = data.success_rate + '%';
         document.getElementById('stat-avg').textContent = data.avg_duration_ms + 'ms';
+        document.getElementById('stat-dlq').textContent = data.dlq_count || 0;
       } catch (e) {
         console.error('Error fetching stats:', e);
       }
@@ -548,8 +553,9 @@
       }
 
       tbody.innerHTML = runs.map(run => {
-        const isSuccess = run.status === 'SUCCESS';
-        const isSkipped = run.status === 'SKIPPED';
+        const isSuccess = run.status.toUpperCase() === 'SUCCESS';
+        const isSkipped = run.status.toUpperCase() === 'SKIPPED';
+        const isFailed = !isSuccess && !isSkipped;
         const statusBadge = isSuccess 
           ? '<span class="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">SUCCESS</span>'
           : isSkipped 
@@ -558,6 +564,11 @@
 
         const shortId = run.run_id ? run.run_id.substring(0, 8) : '-';
         const formattedDate = run.started_at ? new Date(run.started_at).toLocaleTimeString() : '-';
+        const retryBtn = isFailed ? `
+          <button onclick="retryRun('${run.run_id}')" class="px-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded text-[11px] font-medium border border-amber-500/20 transition mr-1" title="Reintentar corrida desde DLQ">
+            🔄 Reintentar
+          </button>
+        ` : '';
 
         return `
           <tr class="hover:bg-slate-800/40 transition">
@@ -567,6 +578,7 @@
             <td class="py-2.5 px-3 font-mono text-slate-300">${run.duration_ms ? run.duration_ms.toFixed(2) + 'ms' : '-'}</td>
             <td class="py-2.5 px-3 text-slate-400">${formattedDate}</td>
             <td class="py-2.5 px-3 text-right">
+              ${retryBtn}
               <button onclick="inspectRun('${run.run_id}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-emerald-400 rounded text-[11px] font-medium transition">
                 Inspeccionar
               </button>
@@ -633,6 +645,27 @@
 
     function closeModal() {
       document.getElementById('step-modal').classList.add('hidden');
+    }
+
+    async function retryRun(runId, resume = true) {
+      if (!confirm(`¿Deseas reintentar la ejecución ${runId} desde la Dead Letter Queue?`)) return;
+      try {
+        const res = await fetch(`/api/runs/${runId}/retry`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ resume: resume })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`✅ Reintento completado con estado '${data.status}'!\nNueva ejecución: ${data.new_run_id}`);
+          fetchRuns();
+          fetchStats();
+        } else {
+          alert('❌ Error al reintentar: ' + (data.detail || JSON.stringify(data)));
+        }
+      } catch (err) {
+        alert('❌ Error de conexión al reintentar: ' + err.message);
+      }
     }
 
     async function fetchSchedulerTasks() {

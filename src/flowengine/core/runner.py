@@ -30,6 +30,7 @@ class FlowRunner:
         self,
         trigger_payload: dict[str, Any] | None = None,
         context_override: dict[str, Any] | None = None,
+        resume_from_step_results: dict[str, StepResult] | None = None,
     ) -> ExecutionRun:
         """Ejecuta el flujo completo paso a paso respetando las dependencias topológicas."""
         trigger_data = trigger_payload or {}
@@ -48,13 +49,23 @@ class FlowRunner:
         if context_override:
             context.update(context_override)
 
+        # Si se reanuda una ejecución previa, reutilizar los nodos que ya fueron exitosos
+        if resume_from_step_results:
+            for nid, step in resume_from_step_results.items():
+                if step.status == NodeStatus.SUCCESS:
+                    run.step_results[nid] = step
+                    context[nid] = step.output_data
+                    context[f"__node_status_{nid}"] = "success"
+
         batches = self.dag.get_topological_batches()
         any_failed = False
         handled_in_loop: set[str] = set()
 
         for batch in batches:
-            # Filtrar nodos ya procesados dentro de un bucle de iteración
-            nodes_to_run = [nid for nid in batch if nid not in handled_in_loop]
+            # Filtrar nodos ya procesados dentro de un bucle de iteración o en resume
+            nodes_to_run = [
+                nid for nid in batch if nid not in handled_in_loop and nid not in run.step_results
+            ]
             if not nodes_to_run:
                 continue
 
@@ -247,3 +258,42 @@ class FlowRunner:
             "__error_type__": type(last_error).__name__,
         }
         return node_id, NodeStatus.FAILED
+
+
+async def retry_failed_run(
+    repo: Any,
+    failed_run_id: str,
+    resume: bool = False,
+) -> ExecutionRun:
+    """Reintenta una corrida fallida de la Dead Letter Queue (DLQ).
+
+    Args:
+        repo: Repositorio persistente de flujos y ejecuciones.
+        failed_run_id: ID de la ejecución fallida a reintentar.
+        resume: Si True, conserva los nodos exitosos previos y reanuda desde el que falló.
+    """
+    raw_run = await repo.get_run(failed_run_id)
+    if not raw_run:
+        raise ValueError(f"Ejecución con ID '{failed_run_id}' no encontrada en la base de datos.")
+
+    flow_id = raw_run["flow_id"]
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise ValueError(f"Flujo '{flow_id}' asociado a la ejecución no fue encontrado.")
+
+    trigger_payload = raw_run.get("trigger_payload", {})
+    runner = FlowRunner(flow)
+
+    resume_steps = None
+    if resume and "step_results" in raw_run:
+        resume_steps = {}
+        for nid, data in raw_run["step_results"].items():
+            if data.get("status") == "success":
+                resume_steps[nid] = StepResult.model_validate(data)
+
+    new_run = await runner.run(
+        trigger_payload=trigger_payload,
+        resume_from_step_results=resume_steps,
+    )
+    await repo.save_run(new_run)
+    return new_run

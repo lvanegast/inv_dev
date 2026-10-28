@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-92%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-96%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -140,6 +140,26 @@ edges:
 ```
 
 Cuando un nodo falla, el contexto de los nodos de rescate recibe automáticamente el objeto `{{error}}` con el detalle del error y el nodo origen para auditoría inmediata.
+
+---
+
+## 📬 Dead Letter Queue (DLQ) & Reintentos Manuales (Smart Resume)
+
+FlowEngine almacena todas las ejecuciones fallidas en una **Dead Letter Queue (DLQ)** persistente, permitiendo reintentar ejecuciones directamente desde la CLI o el Dashboard Web interactivo:
+
+```powershell
+# 1. Consultar la lista de ejecuciones fallidas retenidas en la DLQ
+uv run flow dlq
+
+# 2. Reintentar una ejecución con Smart Resume (reutiliza pasos exitosos y reanuda desde el paso fallido)
+uv run flow retry <run_id> --resume
+
+# 3. O reiniciar la corrida completa desde cero con el payload original
+uv run flow retry <run_id> --full
+```
+
+* **Smart Resume:** A diferencia de un reintento ciego, FlowEngine preserva los outputs de los nodos previos que ya se completaron con éxito (ej. cobro de tarjeta o creación de registro), evitando duplicación de operaciones y reanudando la ejecución únicamente desde el nodo que originó la falla.
+* **Integración API y Dashboard:** Endpoint `GET /api/dlq` para monitoreo y botón interactivo `🔄 Reintentar` en cada corrida fallida del historial.
 
 ---
 

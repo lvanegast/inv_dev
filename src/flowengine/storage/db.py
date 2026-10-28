@@ -44,8 +44,11 @@ CREATE INDEX IF NOT EXISTS idx_runs_flow_started ON runs(flow_id, started_at DES
 class DatabaseManager:
     """Administrador de conexiones a la base de datos SQLite."""
 
-    def __init__(self, db_path: Path | str = DEFAULT_DB_PATH) -> None:
-        self.db_path = Path(db_path)
+    def __init__(self, db_path: Path | str | None = None) -> None:
+        if db_path is None:
+            self.db_path = Path(os.getenv("FLOWENGINE_DB_PATH", "flowengine.db"))
+        else:
+            self.db_path = Path(db_path)
 
     async def init_db(self) -> None:
         """Inicializa las tablas y el modo WAL."""

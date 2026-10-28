@@ -135,6 +135,38 @@ class FlowRepository:
                 "error": row["error"],
             }
 
+    async def list_dlq_runs(self, flow_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
+        """Lista las ejecuciones fallidas retenidas en la Dead Letter Queue (DLQ)."""
+        async with self.db_manager.get_connection() as db:
+            if flow_id:
+                query = (
+                    "SELECT * FROM runs WHERE LOWER(status) = 'failed' AND flow_id = ? "
+                    "ORDER BY started_at DESC LIMIT ?"
+                )
+                params = (flow_id, limit)
+            else:
+                query = "SELECT * FROM runs WHERE LOWER(status) = 'failed' ORDER BY started_at DESC LIMIT ?"
+                params = (limit,)
+
+            async with db.execute(query, params) as cursor:
+                rows = await cursor.fetchall()
+                results = []
+                for r in rows:
+                    results.append(
+                        {
+                            "run_id": r["run_id"],
+                            "flow_id": r["flow_id"],
+                            "status": r["status"],
+                            "started_at": r["started_at"],
+                            "finished_at": r["finished_at"],
+                            "duration_ms": r["duration_ms"],
+                            "trigger_payload": json.loads(r["trigger_payload_json"] or "{}"),
+                            "step_results": json.loads(r["step_results_json"] or "{}"),
+                            "error": r["error"],
+                        }
+                    )
+                return results
+
     async def get_stats(self) -> dict[str, Any]:
         """Obtiene métricas y estadísticas globales para el Dashboard."""
         async with self.db_manager.get_connection() as db:
@@ -165,6 +197,7 @@ class FlowRepository:
                 "total_runs": total_runs,
                 "success_runs": success_runs,
                 "failed_runs": failed_runs,
+                "dlq_count": failed_runs,
                 "avg_duration_ms": avg_duration_ms,
                 "success_rate": success_rate,
             }

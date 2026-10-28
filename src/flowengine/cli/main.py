@@ -11,13 +11,14 @@ import yaml
 from flowengine.cli.visualizer import (
     console,
     print_available_nodes,
+    print_dlq_runs,
     print_flow_tree,
     print_run_result,
     print_runs_history,
 )
 from flowengine.core.dag import DAGGraph, DAGValidationError
 from flowengine.core.models import FlowDefinition
-from flowengine.core.runner import FlowRunner
+from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.nodes.registry import list_available_nodes
 from flowengine.storage.repository import FlowRepository
 
@@ -206,6 +207,52 @@ def export_openapi(
         console.print(f"[bold green][OK] Contrato OpenAPI guardado exitosamente en: {output}[/bold green]")
     else:
         typer.echo(spec_json)
+
+
+@app.command(name="dlq")
+def dead_letter_queue(
+    flow_id: str | None = typer.Option(None, "--flow-id", "-f", help="Filtrar por ID de flujo"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Número máximo de ejecuciones fallidas a listar"),
+):
+    """Muestra las ejecuciones fallidas retenidas en la Dead Letter Queue (DLQ)."""
+    repo = FlowRepository()
+
+    async def _dlq():
+        await repo.initialize()
+        return await repo.list_dlq_runs(flow_id=flow_id, limit=limit)
+
+    failed_runs = asyncio.run(_dlq())
+    if not failed_runs:
+        console.print("[bold green][OK] La Dead Letter Queue está vacía.[/bold green]")
+        return
+
+    print_dlq_runs(failed_runs)
+
+
+@app.command(name="retry")
+def retry(
+    run_id: str = typer.Argument(..., help="ID de la corrida fallida que se desea reintentar"),
+    resume: bool = typer.Option(
+        True,
+        "--resume/--full",
+        help="Reanudar desde el paso fallido conservando pasos exitosos, o reiniciar completo",
+    ),
+):
+    """Reintenta una ejecución fallida de la Dead Letter Queue (DLQ)."""
+    repo = FlowRepository()
+
+    async def _do_retry():
+        await repo.initialize()
+        return await retry_failed_run(repo=repo, failed_run_id=run_id, resume=resume)
+
+    try:
+        console.print(f"[bold cyan][>] Reintentando ejecución:[/bold cyan] {run_id} (resume={resume})")
+        new_run = asyncio.run(_do_retry())
+        print_run_result(new_run, flow_name=new_run.flow_id)
+        console.print("[dim green][OK] Reintento finalizado y registrado en la base de datos.[/dim green]")
+    except Exception as exc:
+        console.print(f"[bold red][ERROR] No se pudo reintentar la ejecución:[/bold red] {exc}")
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":

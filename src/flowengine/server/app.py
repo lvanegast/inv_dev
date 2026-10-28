@@ -2,7 +2,7 @@
 
 import json
 import os
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -12,7 +12,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse
 
 from flowengine.core.models import FlowDefinition
-from flowengine.core.runner import FlowRunner
+from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.core.scheduler import SchedulerService
 from flowengine.core.security import verify_webhook_auth
 from flowengine.nodes.actions_http import close_shared_http_client
@@ -266,6 +266,48 @@ async def get_run_detail(run_id: str) -> dict[str, Any]:
             detail=f"Corrida con ID '{run_id}' no encontrada.",
         )
     return run
+
+
+@app.get("/api/dlq")
+async def get_dead_letter_queue(
+    flow_id: str | None = None, limit: int = 50
+) -> list[dict[str, Any]]:
+    """Retorna las ejecuciones fallidas retenidas en la Dead Letter Queue (DLQ)."""
+    return await repo.list_dlq_runs(flow_id=flow_id, limit=limit)
+
+
+@app.post("/api/runs/{run_id}/retry")
+async def retry_run_endpoint(run_id: str, request: Request) -> dict[str, Any]:
+    """Reintenta una ejecución fallida de la Dead Letter Queue."""
+    body = {}
+    with suppress(Exception):
+        body = await request.json()
+
+    resume = body.get("resume", True) if isinstance(body, dict) else True
+
+    try:
+        new_run = await retry_failed_run(repo=repo, failed_run_id=run_id, resume=resume)
+        return {
+            "message": "Reintento ejecutado exitosamente",
+            "original_run_id": run_id,
+            "new_run_id": new_run.run_id,
+            "flow_id": new_run.flow_id,
+            "status": new_run.status.value,
+            "duration_ms": new_run.duration_ms,
+            "step_results": {
+                k: {
+                    "status": v.status.value,
+                    "duration_ms": v.duration_ms,
+                    "error": v.error,
+                    "output_data": v.output_data,
+                }
+                for k, v in new_run.step_results.items()
+            },
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Fallo al reintentar ejecución: {exc}")
 
 
 @app.get("/api/scheduler/tasks")

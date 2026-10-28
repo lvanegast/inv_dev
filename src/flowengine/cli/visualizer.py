@@ -155,3 +155,39 @@ def print_available_nodes(nodes: list[dict[str, Any]]) -> None:
         )
 
     console.print(table)
+
+
+def print_dlq_runs(runs: list[dict[str, Any]]) -> None:
+    """Muestra las ejecuciones fallidas retenidas en la Dead Letter Queue (DLQ)."""
+    table = Table(
+        title="Dead Letter Queue (DLQ) - Ejecuciones Fallidas Retenidas",
+        show_lines=True,
+        header_style="bold red",
+    )
+    table.add_column("Run ID", style="bold yellow")
+    table.add_column("Flow ID", style="bold white")
+    table.add_column("Fecha y Hora", justify="center")
+    table.add_column("Paso Fallido", style="bold cyan")
+    table.add_column("Mensaje de Error", style="bold red")
+
+    for r in runs:
+        steps = r.get("step_results", {})
+        failed_node = "-"
+        for nid, s in steps.items():
+            if s.get("status") == "failed":
+                failed_node = nid
+                break
+
+        err = str(r.get("error") or "Error no especificado")
+        if len(err) > 75:
+            err = err[:72] + "..."
+
+        table.add_row(
+            r.get("run_id", "")[:12] + "...",
+            r.get("flow_id", ""),
+            r.get("started_at", "")[:19],
+            failed_node,
+            err,
+        )
+
+    console.print(table)
