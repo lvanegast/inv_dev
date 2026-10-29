@@ -1,0 +1,54 @@
+id: throttled-order-flow
+name: "Procesamiento de Pedidos con Throttling y Concurrencia Limitada"
+description: "Flujo protegido contra sobrecarga externa con límite de 5 peticiones/segundo y máximo 2 ejecuciones concurrentes simultáneas."
+status: active
+concurrency_limit: 2
+rate_limit: "5/s"
+
+trigger:
+  id: webhook_trigger
+  name: "Webhook Receptor de Órdenes"
+  type: trigger_webhook
+  config:
+    path: "/webhook/throttled-order-flow"
+
+nodes:
+  - id: validate_payload
+    name: "Validar Estructura de Orden"
+    type: action_transform
+    config:
+      output:
+        order_id: "{{trigger.body.order_id}}"
+        customer: "{{trigger.body.customer}}"
+        amount: "{{trigger.body.amount}}"
+        processed_at: "{{now()}}"
+
+  - id: process_order
+    name: "Procesar Orden con Tasa Protegida"
+    type: action_code
+    config:
+      code: |
+        order_id = input.get("validate_payload", {}).get("order_id", "ORD-UNKNOWN")
+        amount = float(input.get("validate_payload", {}).get("amount", 0.0))
+        output = {
+            "order_id": order_id,
+            "status": "APPROVED" if amount > 0 else "REJECTED",
+            "fee": round(amount * 0.025, 2)
+        }
+
+  - id: log_success
+    name: "Registrar Confirmación"
+    type: action_log
+    config:
+      level: info
+      message: "[ORDER PROCESSED] Orden {{process_order.order_id}} aprobada con fee de ${{process_order.fee}}"
+
+edges:
+  - source: webhook_trigger
+    target: validate_payload
+
+  - source: validate_payload
+    target: process_order
+
+  - source: process_order
+    target: log_success

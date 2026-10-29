@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-96%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-108%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -259,9 +259,48 @@ Las firmas se verifican en **tiempo constante** (`hmac.compare_digest`) para pre
 
 ---
 
+## 🚦 Control de Concurrencia y Rate Limiting por Flujo
+
+FlowEngine permite proteger servicios y APIs de destino contra sobrecarga o errores `429 Too Many Requests` mediante límites de concurrencia y tasa configurables directamente en el YAML:
+
+```yaml
+id: throttled-order-flow
+name: "Procesamiento de Pedidos con Throttling"
+concurrency_limit: 2   # Máximo 2 ejecuciones concurrentes simultáneas
+rate_limit: "5/s"       # Ventana deslizante: 5 peticiones/segundo (soporta s, m, h, d)
+```
+
+- **Ventana Deslizante (Sliding Window):** Monitorea marcas de tiempo en nanosegundos para rechazar ráfagas no permitidas respondiendo HTTP `429 Too Many Requests` con la cabecera estándar `Retry-After: <segundos>`.
+- **Semáforo Asíncrono (`asyncio.Semaphore`):** Limita la concurrencia simultánea en memoria sin bloquear el loop de eventos de FastAPI ni la recepción de peticiones independientes.
+- Ver ejemplo completo en [`examples/throttled_order_flow.yaml`](examples/throttled_order_flow.yaml).
+
+---
+
+## ⚡ Streaming en Tiempo Real (Server-Sent Events - SSE)
+
+Tanto desde el Dashboard Web como mediante la API HTTP, FlowEngine transmite el ciclo de vida y estado de ejecución de cada nodo en tiempo real vía **Server-Sent Events (SSE)** según el estándar W3C:
+
+```powershell
+# Endpoint SSE de ejecución directa en vivo
+curl -N -X POST "http://localhost:8000/api/flows/mi-flujo/run?stream=true" -H "Content-Type: application/json" -d "{}"
+
+# Endpoint SSE para suscribirse a una corrida activa
+curl -N "http://localhost:8000/api/runs/{run_id}/stream"
+```
+
+### Eventos Emitidos:
+1. `run_started`: Notifica el inicio de la corrida y registra el `run_id`.
+2. `node_started`: Indica el paso activo, resaltando visualmente la tarjeta del nodo con animación pulsante.
+3. `node_finished`: Informa el estado final del nodo (`success`, `failed`, `skipped`), tiempo de cómputo en milisegundos (`duration_ms`) y resultado.
+4. `run_finished`: Cierra el ciclo con el balance global de la corrida.
+
+En el **Dashboard Web Interactivo**, las tarjetas del DAG transicionan en vivo de ámbar pulsante a verde esmeralda con tiempos en milisegundos sin requerir recargar la página.
+
+---
+
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 92 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite de 108 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest

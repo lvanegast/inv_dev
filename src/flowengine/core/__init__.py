@@ -15,6 +15,7 @@ from flowengine.core.models import (
 from flowengine.core.runner import FlowRunner
 from flowengine.core.scheduler import SchedulerService, compute_next_run, match_cron
 from flowengine.core.security import compute_hmac_sha256, verify_webhook_auth, verify_webhook_signature
+from flowengine.core.throttling import FlowThrottler, default_throttler, parse_rate_limit
 
 __all__ = [
     "DAGGraph",
@@ -24,6 +25,7 @@ __all__ = [
     "FlowDefinition",
     "FlowRunner",
     "FlowStatus",
+    "FlowThrottler",
     "NodeDefinition",
     "NodeStatus",
     "RunStatus",
@@ -32,8 +34,10 @@ __all__ = [
     "StepResult",
     "compute_hmac_sha256",
     "compute_next_run",
+    "default_throttler",
     "get_nested_value",
     "match_cron",
+    "parse_rate_limit",
     "resolve_expression",
     "verify_webhook_auth",
     "verify_webhook_signature",

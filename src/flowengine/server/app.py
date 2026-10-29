@@ -1,7 +1,9 @@
 """Servidor FastAPI de Ingestión de Webhooks y API de FlowEngine."""
 
+import asyncio
 import json
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,15 +11,17 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 
 from flowengine.core.models import FlowDefinition
 from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.core.scheduler import SchedulerService
 from flowengine.core.security import verify_webhook_auth
+from flowengine.core.throttling import default_throttler
 from flowengine.nodes.actions_http import close_shared_http_client
 from flowengine.nodes.registry import list_available_nodes
 from flowengine.server.openapi import generate_flow_openapi
+from flowengine.server.streaming import execution_broker, format_sse
 from flowengine.storage.repository import FlowRepository
 
 # Repositorio y Scheduler globales del servidor
@@ -112,6 +116,16 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
                 detail=f"Firma o autenticación de Webhook inválida: {auth_msg}",
             )
 
+    # Control de tasa (Rate Limiting) por flujo
+    if flow.rate_limit:
+        allowed, retry_after = default_throttler.check_rate_limit(flow_id, flow.rate_limit)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Límite de tasa ('{flow.rate_limit}') excedido para el flujo '{flow_id}'.",
+                headers={"Retry-After": str(int(retry_after) + 1)},
+            )
+
     # Parsear payload JSON
     try:
         body = json.loads(raw_body_bytes.decode("utf-8")) if raw_body_bytes else {}
@@ -125,8 +139,14 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
         "received_at": datetime.now(UTC).isoformat(),
     }
 
-    runner = FlowRunner(flow)
-    run_result = await runner.run(trigger_payload=trigger_payload)
+    async def on_event(evt: dict[str, Any]) -> None:
+        run_id = evt.get("run_id")
+        if run_id:
+            await execution_broker.publish(run_id, evt)
+
+    async with default_throttler.acquire_concurrency(flow_id, flow.concurrency_limit):
+        runner = FlowRunner(flow, on_event=on_event)
+        run_result = await runner.run(trigger_payload=trigger_payload)
 
     # Persistir ejecución
     await repo.save_run(run_result)
@@ -208,7 +228,11 @@ async def register_flow(flow: FlowDefinition) -> dict[str, str]:
 
 
 @app.post("/api/flows/{flow_id}/run")
-async def run_flow_endpoint(flow_id: str, request: Request) -> dict[str, Any]:
+async def run_flow_endpoint(
+    flow_id: str,
+    request: Request,
+    stream: bool = False,
+) -> Any:
     """Ejecuta un flujo inmediatamente desde el Dashboard o API de pruebas."""
     flow = await repo.get_flow(flow_id)
     if not flow:
@@ -216,6 +240,16 @@ async def run_flow_endpoint(flow_id: str, request: Request) -> dict[str, Any]:
             status_code=404,
             detail=f"Flujo con ID '{flow_id}' no encontrado.",
         )
+
+    # Control de tasa (Rate Limiting) por flujo
+    if flow.rate_limit:
+        allowed, retry_after = default_throttler.check_rate_limit(flow_id, flow.rate_limit)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Límite de tasa ('{flow.rate_limit}') excedido para el flujo '{flow_id}'.",
+                headers={"Retry-After": str(int(retry_after) + 1)},
+            )
 
     try:
         body = await request.json()
@@ -230,8 +264,62 @@ async def run_flow_endpoint(flow_id: str, request: Request) -> dict[str, Any]:
         "source": "dashboard_test_runner",
     }
 
-    runner = FlowRunner(flow)
-    run_result = await runner.run(trigger_payload=trigger_payload)
+    if stream:
+
+        async def stream_generator() -> AsyncGenerator[str, None]:
+            queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+
+            async def on_event(evt: dict[str, Any]) -> None:
+                await queue.put(evt)
+                run_id = evt.get("run_id")
+                if run_id:
+                    await execution_broker.publish(run_id, evt)
+
+            async def execution_worker() -> None:
+                try:
+                    async with default_throttler.acquire_concurrency(
+                        flow_id, flow.concurrency_limit
+                    ):
+                        runner = FlowRunner(flow, on_event=on_event)
+                        run_result = await runner.run(trigger_payload=trigger_payload)
+                        await repo.save_run(run_result)
+                except Exception as err:
+                    await queue.put({"event": "error", "error": str(err)})
+                finally:
+                    await queue.put(None)
+
+            worker_task = asyncio.create_task(execution_worker())
+
+            yield format_sse(
+                {"event": "connected", "flow_id": flow_id, "status": "streaming"}
+            )
+
+            while True:
+                evt = await queue.get()
+                if evt is None:
+                    break
+                yield format_sse(evt)
+
+            await worker_task
+
+        return StreamingResponse(
+            stream_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
+    async def on_event(evt: dict[str, Any]) -> None:
+        run_id = evt.get("run_id")
+        if run_id:
+            await execution_broker.publish(run_id, evt)
+
+    async with default_throttler.acquire_concurrency(flow_id, flow.concurrency_limit):
+        runner = FlowRunner(flow, on_event=on_event)
+        run_result = await runner.run(trigger_payload=trigger_payload)
     await repo.save_run(run_result)
 
     return {
@@ -249,6 +337,20 @@ async def run_flow_endpoint(flow_id: str, request: Request) -> dict[str, Any]:
             for k, v in run_result.step_results.items()
         },
     }
+
+
+@app.get("/api/runs/{run_id}/stream")
+async def stream_run_endpoint(run_id: str) -> StreamingResponse:
+    """Transmite eventos en tiempo real (Server-Sent Events) de una corrida."""
+    return StreamingResponse(
+        execution_broker.stream_run_events(run_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @app.get("/api/runs")

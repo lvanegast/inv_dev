@@ -69,6 +69,15 @@ class FlowDefinition(BaseModel):
     trigger: NodeDefinition = Field(description="Nodo disparador que inicia el flujo")
     nodes: list[NodeDefinition] = Field(default_factory=list, description="Lista de nodos de acción")
     edges: list[EdgeDefinition] = Field(default_factory=list, description="Conexiones entre nodos")
+    concurrency_limit: int | None = Field(
+        default=None,
+        ge=1,
+        description="Límite máximo de ejecuciones concurrentes simultáneas para este flujo",
+    )
+    rate_limit: str | None = Field(
+        default=None,
+        description="Límite de tasa de peticiones (ej. '10/s', '60/m', '1000/h', '5000/d')",
+    )
 
     def get_node(self, node_id: str) -> NodeDefinition | None:
         if self.trigger.id == node_id:

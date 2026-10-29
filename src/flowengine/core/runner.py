@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,13 +19,30 @@ from flowengine.nodes.registry import create_node_instance
 
 logger = logging.getLogger("flowengine.runner")
 
+EventCallback = Callable[[dict[str, Any]], Awaitable[None] | None]
+
 
 class FlowRunner:
     """Ejecutor orquestado del Grafo Acíclico Dirigido (DAG)."""
 
-    def __init__(self, flow: FlowDefinition) -> None:
+    def __init__(
+        self,
+        flow: FlowDefinition,
+        on_event: EventCallback | None = None,
+    ) -> None:
         self.flow = flow
         self.dag = DAGGraph(flow)
+        self.on_event = on_event
+
+    async def _emit_event(self, event_type: str, data: dict[str, Any]) -> None:
+        """Emite un evento de ciclo de vida al listener configurado si existe."""
+        if self.on_event:
+            try:
+                res = self.on_event({"event": event_type, **data})
+                if asyncio.iscoroutine(res):
+                    await res
+            except Exception as e:
+                logger.warning(f"Error al emitir evento '{event_type}': {e}")
 
     async def run(
         self,
@@ -38,6 +56,15 @@ class FlowRunner:
             flow_id=self.flow.id,
             status=RunStatus.RUNNING,
             trigger_payload=trigger_data,
+        )
+
+        await self._emit_event(
+            "run_started",
+            {
+                "run_id": run.run_id,
+                "flow_id": self.flow.id,
+                "started_at": run.started_at.isoformat(),
+            },
         )
 
         # Contexto global de ejecución accesible por expresiones {{nodo.campo}}
@@ -95,6 +122,17 @@ class FlowRunner:
             run.status = RunStatus.FAILED
         else:
             run.status = RunStatus.SUCCESS
+
+        await self._emit_event(
+            "run_finished",
+            {
+                "run_id": run.run_id,
+                "flow_id": self.flow.id,
+                "status": run.status.value,
+                "duration_ms": run.duration_ms,
+                "finished_at": run.finished_at.isoformat(),
+            },
+        )
 
         return run
 
@@ -191,10 +229,31 @@ class FlowRunner:
             )
             run.step_results[node_id] = step_res
             context[f"__node_status_{node_id}"] = "skipped"
+            await self._emit_event(
+                "node_finished",
+                {
+                    "run_id": run.run_id,
+                    "node_id": node_id,
+                    "status": NodeStatus.SKIPPED.value,
+                    "duration_ms": 0.0,
+                    "error": skip_reason,
+                    "output_data": None,
+                },
+            )
             return node_id, NodeStatus.SKIPPED
 
         # 2. Ejecutar con reintentos
         started_at = datetime.now(UTC)
+        await self._emit_event(
+            "node_started",
+            {
+                "run_id": run.run_id,
+                "node_id": node_id,
+                "name": node_def.name,
+                "type": node_def.type,
+                "timestamp": started_at.isoformat(),
+            },
+        )
         retries_left = node_def.retry_count
         delay = node_def.retry_delay_seconds
         last_error: Exception | None = None
@@ -221,6 +280,17 @@ class FlowRunner:
                 # Inyectar el resultado en el contexto
                 context[node_id] = output
                 context[f"__node_status_{node_id}"] = "success"
+                await self._emit_event(
+                    "node_finished",
+                    {
+                        "run_id": run.run_id,
+                        "node_id": node_id,
+                        "status": NodeStatus.SUCCESS.value,
+                        "duration_ms": duration_ms,
+                        "error": None,
+                        "output_data": output,
+                    },
+                )
                 return node_id, NodeStatus.SUCCESS
 
             except Exception as e:
@@ -257,6 +327,17 @@ class FlowRunner:
             "__error__": error_msg,
             "__error_type__": type(last_error).__name__,
         }
+        await self._emit_event(
+            "node_finished",
+            {
+                "run_id": run.run_id,
+                "node_id": node_id,
+                "status": NodeStatus.FAILED.value,
+                "duration_ms": duration_ms,
+                "error": error_msg,
+                "output_data": None,
+            },
+        )
         return node_id, NodeStatus.FAILED
 
 
