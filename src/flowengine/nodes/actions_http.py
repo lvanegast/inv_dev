@@ -54,6 +54,11 @@ class HttpRequestAction(BaseNode):
             pwd = cfg["auth_basic"].get("password", "")
             auth = (user, pwd)
 
+        # Inyectar cabecera W3C Trace Context para trazabilidad distribuida
+        trace_ctx = context.get("__trace_context__")
+        if trace_ctx and hasattr(trace_ctx, "to_traceparent"):
+            headers.setdefault("traceparent", trace_ctx.to_traceparent())
+
         client = get_shared_http_client()
         response = await client.request(
             method=method,

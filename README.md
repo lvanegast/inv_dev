@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-115%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-120%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -332,9 +332,25 @@ tests:
 
 ---
 
+## 📈 Trazabilidad Distribuida W3C (OpenTelemetry) y Métricas Prometheus
+
+FlowEngine provee observabilidad de estándar industrial sin dependencias pesadas:
+
+- **Métricas Prometheus (`GET /metrics`):**
+  - `flowengine_flow_runs_total`: Contador acumulado de corridas por `flow_id` y `status`.
+  - `flowengine_flow_run_duration_seconds`: Histogramas y sumas de tiempos de ejecución por flujo.
+  - `flowengine_step_executions_total`: Ejecuciones de nodos individuales segmentados por `node_type` y `status`.
+  - `flowengine_active_runs`: Concurrencia de flujos activos en memoria en tiempo real.
+- **Trazabilidad W3C y OpenTelemetry Spans:**
+  - Ingestión de cabeceras entrantes `traceparent: 00-{trace_id}-{span_id}-01`.
+  - Propagación automática del contexto `traceparent` en llamadas salientes con `action_http`.
+  - Árbol de spans distribuido consultable en `GET /api/runs/{run_id}/trace` listo para Jaeger, Grafana Tempo o Datadog.
+
+---
+
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 115 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite de 120 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest

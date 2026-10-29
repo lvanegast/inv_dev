@@ -15,6 +15,7 @@ from flowengine.core.models import (
     StepResult,
 )
 from flowengine.core.security import mask_sensitive_data
+from flowengine.core.telemetry import Span, TraceContext, telemetry
 from flowengine.nodes.registry import create_node_instance
 
 logger = logging.getLogger("flowengine.runner")
@@ -30,11 +31,13 @@ class FlowRunner:
         flow: FlowDefinition,
         on_event: EventCallback | None = None,
         mocks: dict[str, Any] | None = None,
+        trace_context: TraceContext | None = None,
     ) -> None:
         self.flow = flow
         self.dag = DAGGraph(flow)
         self.on_event = on_event
         self.mocks = mocks or {}
+        self.trace_context = trace_context or TraceContext()
 
     async def _emit_event(self, event_type: str, data: dict[str, Any]) -> None:
         """Emite un evento de ciclo de vida al listener configurado si existe."""
@@ -60,6 +63,14 @@ class FlowRunner:
             trigger_payload=trigger_data,
         )
 
+        telemetry.metrics.increment_active_runs(self.flow.id)
+        root_span = Span(
+            name=f"Flow: {self.flow.name}",
+            context=self.trace_context,
+            kind="SERVER",
+            attributes={"flow.id": self.flow.id, "run.id": run.run_id},
+        )
+
         await self._emit_event(
             "run_started",
             {
@@ -73,6 +84,8 @@ class FlowRunner:
         context: dict[str, Any] = {
             "__trigger_payload__": trigger_data,
             "__timestamp__": datetime.now(UTC).isoformat(),
+            "__trace_context__": self.trace_context,
+            "__trace_id__": self.trace_context.trace_id,
             "trigger": trigger_data,
         }
         if context_override:
@@ -122,8 +135,14 @@ class FlowRunner:
         run.finished_at = datetime.now(UTC)
         if any_failed:
             run.status = RunStatus.FAILED
+            root_span.finish(status="ERROR")
         else:
             run.status = RunStatus.SUCCESS
+            root_span.finish(status="OK")
+
+        telemetry.metrics.decrement_active_runs(self.flow.id)
+        telemetry.metrics.record_run(self.flow.id, run.status.value, run.duration_ms / 1000.0)
+        telemetry.record_span(run.run_id, root_span)
 
         await self._emit_event(
             "run_finished",
@@ -242,10 +261,18 @@ class FlowRunner:
                     "output_data": None,
                 },
             )
+            telemetry.metrics.record_step(node_def.type, "skipped", 0.0)
             return node_id, NodeStatus.SKIPPED
 
         # 2. Ejecutar con reintentos
         started_at = datetime.now(UTC)
+        child_ctx = self.trace_context.create_child()
+        node_span = Span(
+            name=f"Node: {node_def.name or node_id}",
+            context=child_ctx,
+            kind="INTERNAL",
+            attributes={"node.id": node_id, "node.type": node_def.type},
+        )
         await self._emit_event(
             "node_started",
             {
@@ -273,6 +300,9 @@ class FlowRunner:
             run.step_results[node_id] = step_res
             context[node_id] = mock_output
             context[f"__node_status_{node_id}"] = "success"
+            node_span.finish(status="OK")
+            telemetry.record_span(run.run_id, node_span)
+            telemetry.metrics.record_step(node_def.type, "success", 0.0001)
             await self._emit_event(
                 "node_finished",
                 {
@@ -324,6 +354,9 @@ class FlowRunner:
                         "output_data": output,
                     },
                 )
+                node_span.finish(status="OK")
+                telemetry.record_span(run.run_id, node_span)
+                telemetry.metrics.record_step(node_def.type, "success", duration_ms / 1000.0)
                 return node_id, NodeStatus.SUCCESS
 
             except Exception as e:
@@ -371,6 +404,9 @@ class FlowRunner:
                 "output_data": None,
             },
         )
+        node_span.finish(status="ERROR", error_message=error_msg)
+        telemetry.record_span(run.run_id, node_span)
+        telemetry.metrics.record_step(node_def.type, "failed", duration_ms / 1000.0)
         return node_id, NodeStatus.FAILED
 
 

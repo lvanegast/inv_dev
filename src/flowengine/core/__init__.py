@@ -15,6 +15,7 @@ from flowengine.core.models import (
 from flowengine.core.runner import FlowRunner
 from flowengine.core.scheduler import SchedulerService, compute_next_run, match_cron
 from flowengine.core.security import compute_hmac_sha256, verify_webhook_auth, verify_webhook_signature
+from flowengine.core.telemetry import Span, TraceContext, telemetry
 from flowengine.core.testing import (
     AssertionResult,
     FlowTestCase,
@@ -41,10 +42,12 @@ __all__ = [
     "RunStatus",
     "SafeConditionEvaluator",
     "SchedulerService",
+    "Span",
     "StepResult",
     "AssertionResult",
     "TestCaseResult",
     "TestSuiteResult",
+    "TraceContext",
     "compute_hmac_sha256",
     "compute_next_run",
     "default_throttler",
@@ -55,6 +58,7 @@ __all__ = [
     "resolve_expression",
     "run_flow_test",
     "run_flow_test_suite",
+    "telemetry",
     "verify_webhook_auth",
     "verify_webhook_signature",
 ]

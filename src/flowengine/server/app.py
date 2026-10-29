@@ -11,12 +11,13 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 
 from flowengine.core.models import FlowDefinition
 from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.core.scheduler import SchedulerService
 from flowengine.core.security import verify_webhook_auth
+from flowengine.core.telemetry import TraceContext, telemetry
 from flowengine.core.throttling import default_throttler
 from flowengine.nodes.actions_http import close_shared_http_client
 from flowengine.nodes.registry import list_available_nodes
@@ -139,13 +140,15 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
         "received_at": datetime.now(UTC).isoformat(),
     }
 
+    trace_ctx = TraceContext.from_traceparent(request.headers.get("traceparent"))
+
     async def on_event(evt: dict[str, Any]) -> None:
         run_id = evt.get("run_id")
         if run_id:
             await execution_broker.publish(run_id, evt)
 
     async with default_throttler.acquire_concurrency(flow_id, flow.concurrency_limit):
-        runner = FlowRunner(flow, on_event=on_event)
+        runner = FlowRunner(flow, on_event=on_event, trace_context=trace_ctx)
         run_result = await runner.run(trigger_payload=trigger_payload)
 
     # Persistir ejecución
@@ -154,6 +157,7 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
     return {
         "run_id": run_result.run_id,
         "flow_id": flow_id,
+        "trace_id": trace_ctx.trace_id,
         "status": run_result.status.value,
         "duration_ms": run_result.duration_ms,
         "step_results": {
@@ -264,6 +268,8 @@ async def run_flow_endpoint(
         "source": "dashboard_test_runner",
     }
 
+    trace_ctx = TraceContext.from_traceparent(request.headers.get("traceparent"))
+
     if stream:
 
         async def stream_generator() -> AsyncGenerator[str, None]:
@@ -280,7 +286,7 @@ async def run_flow_endpoint(
                     async with default_throttler.acquire_concurrency(
                         flow_id, flow.concurrency_limit
                     ):
-                        runner = FlowRunner(flow, on_event=on_event)
+                        runner = FlowRunner(flow, on_event=on_event, trace_context=trace_ctx)
                         run_result = await runner.run(trigger_payload=trigger_payload)
                         await repo.save_run(run_result)
                 except Exception as err:
@@ -291,7 +297,12 @@ async def run_flow_endpoint(
             worker_task = asyncio.create_task(execution_worker())
 
             yield format_sse(
-                {"event": "connected", "flow_id": flow_id, "status": "streaming"}
+                {
+                    "event": "connected",
+                    "flow_id": flow_id,
+                    "trace_id": trace_ctx.trace_id,
+                    "status": "streaming",
+                }
             )
 
             while True:
@@ -309,6 +320,7 @@ async def run_flow_endpoint(
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "X-Accel-Buffering": "no",
+                "X-Trace-Id": trace_ctx.trace_id,
             },
         )
 
@@ -318,13 +330,14 @@ async def run_flow_endpoint(
             await execution_broker.publish(run_id, evt)
 
     async with default_throttler.acquire_concurrency(flow_id, flow.concurrency_limit):
-        runner = FlowRunner(flow, on_event=on_event)
+        runner = FlowRunner(flow, on_event=on_event, trace_context=trace_ctx)
         run_result = await runner.run(trigger_payload=trigger_payload)
     await repo.save_run(run_result)
 
     return {
         "run_id": run_result.run_id,
         "flow_id": flow_id,
+        "trace_id": trace_ctx.trace_id,
         "status": run_result.status.value,
         "duration_ms": run_result.duration_ms,
         "step_results": {
@@ -337,6 +350,27 @@ async def run_flow_endpoint(
             for k, v in run_result.step_results.items()
         },
     }
+
+
+@app.get("/metrics", response_class=PlainTextResponse)
+async def prometheus_metrics() -> PlainTextResponse:
+    """Expone métricas del servidor y ejecuciones de flujos en formato Prometheus estándar."""
+    return PlainTextResponse(
+        content=telemetry.metrics.generate_prometheus_text(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
+
+
+@app.get("/api/runs/{run_id}/trace")
+async def get_run_trace_endpoint(run_id: str) -> dict[str, Any]:
+    """Retorna los spans de trazabilidad distribuida OpenTelemetry de una corrida."""
+    spans = telemetry.get_trace_spans(run_id)
+    if not spans:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No se encontraron trazas registradas para la corrida '{run_id}'.",
+        )
+    return {"run_id": run_id, "spans": spans}
 
 
 @app.get("/api/runs/{run_id}/stream")
