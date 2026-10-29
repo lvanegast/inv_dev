@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-120%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-125%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -348,9 +348,21 @@ FlowEngine provee observabilidad de estándar industrial sin dependencias pesada
 
 ---
 
+## 🛠️ Diseñador Visual de Flujos (Visual Flow Builder en Dashboard)
+
+El Dashboard Web ahora incluye un diseñador visual interactivo que permite crear, configurar y conectar flujos completos directamente desde el navegador:
+
+- **Configuración de Metadatos y Throttling:** Asignación de ID, nombre, descripción, límites de concurrencia y rate limit.
+- **Selector Dinámico de Nodos:** Acceso a todos los nodos nativos y plugins registrados (`action_transform`, `action_code`, `action_http`, `action_log`, etc.).
+- **Enlace de Aristas y Rutas Alternativas:** Conexión visual entre nodos con evaluación condicional (`if`) y soporte para ramas de contingencia (`on_error`).
+- **Validación DAG en Vivo (`POST /api/flows/validate`):** Comprobación en tiempo real de aciclicidad y referencias topológicas antes de guardar.
+- **Exportación Directa a YAML (`GET /api/flows/{flow_id}/export.yaml`):** Descarga de la especificación limpia en un solo clic.
+
+---
+
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 120 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite de 125 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest

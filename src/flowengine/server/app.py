@@ -9,10 +9,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 
+from flowengine.core.dag import DAGGraph, DAGValidationError
 from flowengine.core.models import FlowDefinition
 from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.core.scheduler import SchedulerService
@@ -229,6 +231,42 @@ async def register_flow(flow: FlowDefinition) -> dict[str, str]:
     if scheduler._running:
         await scheduler.reload_flows()
     return {"message": "Flujo registrado exitosamente", "flow_id": flow.id}
+
+
+@app.post("/api/flows/validate")
+async def validate_flow_endpoint(flow: FlowDefinition) -> dict[str, Any]:
+    """Valida la integridad, referencias de aristas y aciclicidad del Grafo (DAG) de un flujo."""
+    try:
+        dag = DAGGraph(flow)
+        batches = dag.get_topological_batches()
+        return {
+            "valid": True,
+            "message": "Flujo válido y acíclico.",
+            "topological_batches": batches,
+        }
+    except DAGValidationError as e:
+        return {"valid": False, "error": str(e)}
+
+
+@app.get("/api/flows/{flow_id}/export.yaml", response_class=PlainTextResponse)
+async def export_flow_yaml(flow_id: str) -> PlainTextResponse:
+    """Exporta la definición completa del flujo en formato YAML descargable."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Flujo con ID '{flow_id}' no encontrado.",
+        )
+    yaml_str = yaml.dump(
+        flow.model_dump(mode="json", exclude_none=True),
+        sort_keys=False,
+        allow_unicode=True,
+    )
+    return PlainTextResponse(
+        content=yaml_str,
+        media_type="application/x-yaml",
+        headers={"Content-Disposition": f'attachment; filename="{flow_id}.yaml"'},
+    )
 
 
 @app.post("/api/flows/{flow_id}/run")

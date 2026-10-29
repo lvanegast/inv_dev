@@ -84,6 +84,10 @@
       </div>
 
       <div class="flex items-center space-x-3">
+        <button onclick="openFlowBuilder()" class="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-xs rounded-lg shadow-md shadow-emerald-900/30 transition">
+          <span>➕</span>
+          <span>Crear Flujo (Visual Builder)</span>
+        </button>
         <label class="flex items-center space-x-1.5 text-xs text-slate-300 cursor-pointer">
           <input type="checkbox" id="auto-refresh" checked class="rounded border-slate-700 bg-slate-800 text-emerald-500 focus:ring-emerald-500">
           <span>Auto-refresh (3s)</span>
@@ -278,6 +282,122 @@
     </div>
   </div>
 
+  <!-- Visual Flow Builder Modal -->
+  <div id="flow-builder-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-4xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+      <!-- Builder Header -->
+      <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
+        <div>
+          <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+            <span>🛠️ Creador Visual de Flujos</span>
+            <span class="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">Visual DAG Builder</span>
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">Diseña flujos acíclicos, configura disparadores, añade nodos y enlaza condiciones interactivamente.</p>
+        </div>
+        <button onclick="closeFlowBuilder()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+          ✕
+        </button>
+      </div>
+
+      <!-- Builder Body (Scrollable) -->
+      <div class="p-6 overflow-y-auto space-y-6">
+        <!-- 1. Metadatos del Flujo -->
+        <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl space-y-3">
+          <h4 class="text-xs font-semibold uppercase text-emerald-400 tracking-wider">1. Especificaciones de la Automatización</h4>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1">ID Único del Flujo *</label>
+              <input id="builder-flow-id" type="text" placeholder="ej. sync-orders-crm" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white font-mono">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Nombre Descriptivo *</label>
+              <input id="builder-flow-name" type="text" placeholder="ej. Sincronizar Pedidos con CRM" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white">
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-slate-400 mb-1">Descripción</label>
+              <input id="builder-flow-desc" type="text" placeholder="Objetivo del flujo..." class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Límite de Concurrencia (Opcional)</label>
+              <input id="builder-flow-concurrency" type="number" min="1" placeholder="ej. 2" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Rate Limit (Opcional)</label>
+              <input id="builder-flow-rate" type="text" placeholder="ej. 10/s, 60/m" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white font-mono">
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Disparador (Trigger) -->
+        <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl space-y-3">
+          <h4 class="text-xs font-semibold uppercase text-emerald-400 tracking-wider">2. Disparador Inicial (Trigger)</h4>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1">ID del Trigger</label>
+              <input id="builder-trigger-id" type="text" value="webhook_trigger" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white font-mono">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Nombre</label>
+              <input id="builder-trigger-name" type="text" value="Webhook Inbound" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white">
+            </div>
+            <div>
+              <label class="block text-slate-400 mb-1">Tipo de Disparador</label>
+              <select id="builder-trigger-type" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white">
+                <option value="trigger_webhook">trigger_webhook (HTTP POST)</option>
+                <option value="trigger_schedule">trigger_schedule (Cron / Interval)</option>
+                <option value="trigger_manual">trigger_manual (Manual API / UI)</option>
+              </select>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block text-slate-400 mb-1">Configuración JSON</label>
+              <textarea id="builder-trigger-config" rows="2" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-white font-mono text-xs">{"path": "/webhook/nuevo-flujo"}</textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Nodos de Acción -->
+        <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="text-xs font-semibold uppercase text-emerald-400 tracking-wider">3. Pasos y Nodos de Acción</h4>
+            <button onclick="addBuilderNodeRow()" class="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded text-xs transition flex items-center space-x-1">
+              <span>➕ Agregar Nodo</span>
+            </button>
+          </div>
+          <div id="builder-nodes-container" class="space-y-3"></div>
+        </div>
+
+        <!-- 4. Aristas y Conexiones (DAG Edges) -->
+        <div class="bg-slate-950/60 border border-slate-800/80 p-4 rounded-xl space-y-3">
+          <div class="flex items-center justify-between">
+            <h4 class="text-xs font-semibold uppercase text-emerald-400 tracking-wider">4. Conexiones y Condiciones (DAG Edges)</h4>
+            <button onclick="addBuilderEdgeRow()" class="px-2.5 py-1 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/30 rounded text-xs transition flex items-center space-x-1">
+              <span>➕ Conectar Nodos</span>
+            </button>
+          </div>
+          <div id="builder-edges-container" class="space-y-3"></div>
+        </div>
+
+        <!-- Validation Alert -->
+        <div id="builder-status-alert" class="hidden text-xs p-3 rounded-lg border"></div>
+      </div>
+
+      <!-- Builder Footer -->
+      <div class="px-6 py-3 border-t border-slate-800 bg-slate-900 flex items-center justify-between">
+        <button onclick="validateBuilderFlow()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs rounded-lg transition border border-slate-700">
+          🔍 Validar Integridad (DAG)
+        </button>
+        <div class="flex items-center space-x-2">
+          <button onclick="closeFlowBuilder()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg text-slate-300 transition">
+            Cancelar
+          </button>
+          <button onclick="saveBuilderFlow()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium rounded-lg shadow-lg shadow-emerald-900/30 transition">
+            💾 Guardar y Registrar Flujo
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Client-side Logic -->
   <script>
     let registeredFlows = [];
@@ -396,6 +516,8 @@
       tagsContainer.innerHTML = `
         <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">${flow.id}</span>
         <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">${flow.status || 'active'}</span>
+        <button onclick="window.open('/api/flows/' + currentFlow.id + '/export.yaml')" class="text-xs px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="Descargar definición YAML">⬇️ YAML</button>
+        <button onclick="window.open('/api/flows/' + currentFlow.id + '/docs', '_blank')" class="text-xs px-2 py-0.5 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 transition" title="Ver documentación OpenAPI">📖 Swagger</button>
       `;
 
       const dag = document.getElementById('dag-container');
@@ -827,6 +949,319 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+    }
+
+    // ==========================================
+    // Visual Flow Builder Logic
+    // ==========================================
+    let catalogNodes = [];
+    let builderNodes = [];
+    let builderEdges = [];
+
+    async function openFlowBuilder() {
+      if (catalogNodes.length === 0) {
+        try {
+          const res = await fetch('/api/nodes');
+          if (res.ok) catalogNodes = await res.json();
+        } catch (e) {
+          console.warn('Error fetching catalog nodes:', e);
+        }
+      }
+
+      const randomId = 'flow-' + Math.floor(1000 + Math.random() * 9000);
+      document.getElementById('builder-flow-id').value = randomId;
+      document.getElementById('builder-flow-name').value = 'Flujo Personalizado ' + randomId;
+      document.getElementById('builder-flow-desc').value = 'Automatización diseñada con el Visual Flow Builder';
+      document.getElementById('builder-flow-concurrency').value = '';
+      document.getElementById('builder-flow-rate').value = '';
+
+      document.getElementById('builder-trigger-id').value = 'trigger_inbound';
+      document.getElementById('builder-trigger-name').value = 'Webhook de Entrada';
+      document.getElementById('builder-trigger-type').value = 'trigger_webhook';
+      document.getElementById('builder-trigger-config').value = JSON.stringify({ path: '/webhook/' + randomId }, null, 2);
+
+      builderNodes = [
+        {
+          id: 'transform_data',
+          name: 'Transformar Datos',
+          type: 'action_transform',
+          config: JSON.stringify({ output: { received_at: '{{now()}}', status: 'PROCESSED' } }, null, 2)
+        }
+      ];
+
+      builderEdges = [
+        {
+          source: 'trigger_inbound',
+          target: 'transform_data',
+          condition: '',
+          on_error: false
+        }
+      ];
+
+      renderBuilderNodes();
+      renderBuilderEdges();
+      document.getElementById('builder-status-alert').classList.add('hidden');
+      document.getElementById('flow-builder-modal').classList.remove('hidden');
+    }
+
+    function closeFlowBuilder() {
+      document.getElementById('flow-builder-modal').classList.add('hidden');
+    }
+
+    function addBuilderNodeRow() {
+      const idx = builderNodes.length + 1;
+      builderNodes.push({
+        id: 'step_' + idx,
+        name: 'Paso ' + idx,
+        type: 'action_log',
+        config: JSON.stringify({ level: 'info', message: 'Ejecutando paso ' + idx }, null, 2)
+      });
+      renderBuilderNodes();
+      renderBuilderEdges();
+    }
+
+    function removeBuilderNodeRow(index) {
+      const removedId = builderNodes[index].id;
+      builderNodes.splice(index, 1);
+      builderEdges = builderEdges.filter(e => e.source !== removedId && e.target !== removedId);
+      renderBuilderNodes();
+      renderBuilderEdges();
+    }
+
+    function renderBuilderNodes() {
+      const container = document.getElementById('builder-nodes-container');
+      if (builderNodes.length === 0) {
+        container.innerHTML = `<div class="text-slate-500 text-xs text-center py-3">No hay nodos agregados aún. Haz clic en 'Agregar Nodo'.</div>`;
+        return;
+      }
+
+      container.innerHTML = builderNodes.map((node, idx) => `
+        <div class="p-3 bg-slate-900 border border-slate-800 rounded-lg space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-300">Paso ${idx + 1}: <span class="font-mono text-emerald-400">${node.id}</span></span>
+            <button onclick="removeBuilderNodeRow(${idx})" class="text-red-400 hover:text-red-300 text-xs px-2 py-0.5 rounded hover:bg-red-500/10 transition">✕ Eliminar</button>
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+            <div>
+              <label class="block text-slate-500 mb-0.5">ID del Nodo</label>
+              <input type="text" value="${escapeHtml(node.id)}" onchange="builderNodes[${idx}].id = this.value; renderBuilderEdges();" class="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-white font-mono">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-0.5">Nombre</label>
+              <input type="text" value="${escapeHtml(node.name)}" onchange="builderNodes[${idx}].name = this.value;" class="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-white">
+            </div>
+            <div>
+              <label class="block text-slate-500 mb-0.5">Tipo de Nodo</label>
+              <select onchange="builderNodes[${idx}].type = this.value;" class="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-white">
+                ${getNodeTypeOptions(node.type)}
+              </select>
+            </div>
+            <div class="md:col-span-3">
+              <label class="block text-slate-500 mb-0.5">Configuración (JSON)</label>
+              <textarea rows="2" onchange="builderNodes[${idx}].config = this.value;" class="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-white font-mono text-xs">${escapeHtml(node.config)}</textarea>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function getNodeTypeOptions(selectedType) {
+      const defaultTypes = [
+        'action_transform', 'action_code', 'action_http', 'action_log',
+        'action_filter', 'action_iterator', 'action_aggregator'
+      ];
+      const types = catalogNodes.length > 0 ? catalogNodes.map(n => n.type) : defaultTypes;
+      const uniqueTypes = Array.from(new Set([...types, selectedType]));
+      return uniqueTypes.map(t => `<option value="${t}" ${t === selectedType ? 'selected' : ''}>${t}</option>`).join('');
+    }
+
+    function addBuilderEdgeRow() {
+      const triggerId = document.getElementById('builder-trigger-id').value || 'trigger';
+      const source = builderNodes.length > 0 ? builderNodes[builderNodes.length - 1].id : triggerId;
+      builderEdges.push({
+        source: source,
+        target: '',
+        condition: '',
+        on_error: false
+      });
+      renderBuilderEdges();
+    }
+
+    function removeBuilderEdgeRow(index) {
+      builderEdges.splice(index, 1);
+      renderBuilderEdges();
+    }
+
+    function renderBuilderEdges() {
+      const container = document.getElementById('builder-edges-container');
+      const triggerId = document.getElementById('builder-trigger-id').value || 'trigger';
+      const allSources = [triggerId, ...builderNodes.map(n => n.id)];
+      const allTargets = builderNodes.map(n => n.id);
+
+      if (builderEdges.length === 0) {
+        container.innerHTML = `<div class="text-slate-500 text-xs text-center py-3">No hay conexiones definidas. Haz clic en 'Conectar Nodos'.</div>`;
+        return;
+      }
+
+      container.innerHTML = builderEdges.map((edge, idx) => `
+        <div class="p-2.5 bg-slate-900 border border-slate-800 rounded-lg flex flex-wrap items-center gap-2 text-xs">
+          <div class="flex items-center space-x-1">
+            <span class="text-slate-500">De:</span>
+            <select onchange="builderEdges[${idx}].source = this.value;" class="bg-slate-950 border border-slate-700 rounded p-1 text-white font-mono">
+              ${allSources.map(s => `<option value="${s}" ${s === edge.source ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </div>
+          <span class="text-slate-600">➔</span>
+          <div class="flex items-center space-x-1">
+            <span class="text-slate-500">A:</span>
+            <select onchange="builderEdges[${idx}].target = this.value;" class="bg-slate-950 border border-slate-700 rounded p-1 text-white font-mono">
+              <option value="">-- Seleccionar --</option>
+              ${allTargets.map(t => `<option value="${t}" ${t === edge.target ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </div>
+          <div class="flex-1 min-w-[140px]">
+            <input type="text" placeholder="Condición if (opcional)" value="${escapeHtml(edge.condition || '')}" onchange="builderEdges[${idx}].condition = this.value;" class="w-full bg-slate-950 border border-slate-700 rounded p-1 text-white text-xs">
+          </div>
+          <label class="flex items-center space-x-1 text-slate-400 cursor-pointer">
+            <input type="checkbox" ${edge.on_error ? 'checked' : ''} onchange="builderEdges[${idx}].on_error = this.checked;" class="rounded border-slate-700 bg-slate-950 text-red-500">
+            <span class="text-[10px] text-red-400">On Error</span>
+          </label>
+          <button onclick="removeBuilderEdgeRow(${idx})" class="text-red-400 hover:text-red-300 p-1 rounded hover:bg-red-500/10 transition">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function collectBuilderFlowData() {
+      const flowId = document.getElementById('builder-flow-id').value.trim();
+      const flowName = document.getElementById('builder-flow-name').value.trim();
+      const flowDesc = document.getElementById('builder-flow-desc').value.trim();
+      const concurrencyVal = document.getElementById('builder-flow-concurrency').value.trim();
+      const rateVal = document.getElementById('builder-flow-rate').value.trim();
+
+      const trigId = document.getElementById('builder-trigger-id').value.trim();
+      const trigName = document.getElementById('builder-trigger-name').value.trim();
+      const trigType = document.getElementById('builder-trigger-type').value;
+      const trigConfigRaw = document.getElementById('builder-trigger-config').value.trim();
+
+      let trigConfig = {};
+      if (trigConfigRaw) {
+        try {
+          trigConfig = JSON.parse(trigConfigRaw);
+        } catch (e) {
+          throw new Error('Configuración JSON del Trigger inválida: ' + e.message);
+        }
+      }
+
+      const nodes = builderNodes.map((n, i) => {
+        let parsedConfig = {};
+        if (n.config && n.config.trim()) {
+          try {
+            parsedConfig = JSON.parse(n.config);
+          } catch (e) {
+            throw new Error('Configuración JSON del nodo inválida: ' + e.message);
+          }
+        }
+        return {
+          id: n.id.trim(),
+          name: n.name.trim() || n.id.trim(),
+          type: n.type,
+          config: parsedConfig
+        };
+      });
+
+      const edges = builderEdges
+        .filter(e => e.source && e.target)
+        .map(e => ({
+          source: e.source,
+          target: e.target,
+          condition: e.condition && e.condition.trim() ? e.condition.trim() : null,
+          on_error: Boolean(e.on_error)
+        }));
+
+      return {
+        id: flowId,
+        name: flowName,
+        description: flowDesc,
+        status: 'active',
+        concurrency_limit: concurrencyVal ? parseInt(concurrencyVal, 10) : null,
+        rate_limit: rateVal || null,
+        trigger: {
+          id: trigId,
+          name: trigName,
+          type: trigType,
+          config: trigConfig
+        },
+        nodes: nodes,
+        edges: edges
+      };
+    }
+
+    async function validateBuilderFlow() {
+      const alertEl = document.getElementById('builder-status-alert');
+      alertEl.classList.add('hidden');
+
+      let flowData;
+      try {
+        flowData = collectBuilderFlowData();
+      } catch (err) {
+        alertEl.className = 'text-xs p-3 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400';
+        alertEl.textContent = '❌ Error de formato: ' + err.message;
+        alertEl.classList.remove('hidden');
+        return false;
+      }
+
+      try {
+        const res = await fetch('/api/flows/validate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(flowData)
+        });
+        const data = await res.json();
+        if (res.ok && data.valid) {
+          alertEl.className = 'text-xs p-3 rounded-lg border bg-emerald-500/10 border-emerald-500/30 text-emerald-400';
+          alertEl.innerHTML = `✅ <strong>Flujo Válido:</strong> Grafo acíclico comprobado. Capas topológicas: <strong>${(data.topological_batches || []).length}</strong>`;
+          alertEl.classList.remove('hidden');
+          return true;
+        } else {
+          alertEl.className = 'text-xs p-3 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400';
+          alertEl.innerHTML = `❌ <strong>Error en el Grafo (DAG):</strong> ${escapeHtml(data.error || 'Ciclo detectado o nodo no referenciado')}`;
+          alertEl.classList.remove('hidden');
+          return false;
+        }
+      } catch (err) {
+        alertEl.className = 'text-xs p-3 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400';
+        alertEl.textContent = 'Error de conexión al validar: ' + err.message;
+        alertEl.classList.remove('hidden');
+        return false;
+      }
+    }
+
+    async function saveBuilderFlow() {
+      const isValid = await validateBuilderFlow();
+      if (!isValid) return;
+
+      const flowData = collectBuilderFlowData();
+      try {
+        const res = await fetch('/api/flows', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(flowData)
+        });
+        if (res.ok) {
+          closeFlowBuilder();
+          await fetchFlows();
+          selectFlow(flowData.id);
+          fetchStats();
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          const alertEl = document.getElementById('builder-status-alert');
+          alertEl.className = 'text-xs p-3 rounded-lg border bg-red-500/10 border-red-500/30 text-red-400';
+          alertEl.textContent = '❌ Error al guardar flujo: ' + (errData.detail || JSON.stringify(errData));
+          alertEl.classList.remove('hidden');
+        }
+      } catch (err) {
+        alert('Error de conexión al guardar: ' + err.message);
+      }
     }
 
     window.onload = initDashboard;
