@@ -191,3 +191,42 @@ def print_dlq_runs(runs: list[dict[str, Any]]) -> None:
         )
 
     console.print(table)
+
+
+def print_test_suite_results(suite: Any) -> None:
+    """Muestra el reporte visual de ejecución de una suite de pruebas para un flujo."""
+    status_style = "bold green" if suite.passed else "bold red"
+    status_label = "[ÉXITO] TODOS LOS TESTS PASARON" if suite.passed else "[FALLO] ALGUNOS TESTS FALLARON"
+
+    summary_panel = Panel(
+        f"[bold cyan]Flujo:[/bold cyan] {suite.flow_name} [dim]({suite.flow_id})[/dim]\n"
+        f"[bold]Total Casos:[/bold] {suite.total_cases} | "
+        f"[bold green]Exitosos:[/bold green] {suite.passed_cases} | "
+        f"[bold red]Fallidos:[/bold red] {suite.failed_cases} | "
+        f"[bold yellow]Tiempo:[/bold yellow] {suite.duration_ms}ms\n"
+        f"[{status_style}]{status_label}[/{status_style}]",
+        title="[bold yellow]Reporte de Pruebas Unitarias de Flujo (Testing Framework)[/bold yellow]",
+        border_style="green" if suite.passed else "red",
+    )
+    console.print(summary_panel)
+
+    table = Table(title="Detalle de Casos de Prueba y Aserciones", show_lines=True)
+    table.add_column("Caso de Prueba", style="bold white")
+    table.add_column("Estado", justify="center")
+    table.add_column("Duración", justify="right")
+    table.add_column("Aserciones y Validaciones")
+
+    for case in suite.case_results:
+        c_status = "[bold green]PASS[/bold green]" if case.passed else "[bold red]FAIL[/bold red]"
+        lines = []
+        if case.error:
+            lines.append(f"[bold red]Error:[/bold red] {case.error}")
+        for a in case.assertion_results:
+            icon = "[bold green]✔[/bold green]" if a.passed else "[bold red]✘[/bold red]"
+            detail = f" [dim red]({a.error})[/dim red]" if not a.passed and a.error else ""
+            lines.append(f"{icon} {a.assertion}{detail}")
+
+        assertions_col = "\n".join(lines) if lines else "[dim]Sin aserciones explícitas[/dim]"
+        table.add_row(case.name, c_status, f"{case.duration_ms}ms", assertions_col)
+
+    console.print(table)

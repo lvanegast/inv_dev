@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-108%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-115%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -298,9 +298,43 @@ En el **Dashboard Web Interactivo**, las tarjetas del DAG transicionan en vivo d
 
 ---
 
+## 🧪 Framework de Testing y Mocking de Flujos (Dry-Run)
+
+FlowEngine incluye un framework de testing declarativo que permite evaluar flujos complejos de extremo a extremo aislando llamadas a APIs externas mediante **Mocks** y validando aserciones sobre los outputs de cualquier paso:
+
+```powershell
+# Ejecutar una suite completa de pruebas declarativas desde archivo
+uv run flow test examples/throttled_order_flow.yaml --test-file examples/test_throttled_order_suite.yaml
+
+# Ejecutar una prueba ad-hoc en terminal con aserciones inmediatas
+uv run flow test examples/throttled_order_flow.yaml \
+  --payload '{"body": {"order_id": "ORD-1", "amount": 100.0}}' \
+  --assert "{{process_order.status}} == 'APPROVED'" \
+  --assert "{{process_order.fee}} == 2.5"
+```
+
+### Definición de Suite de Pruebas YAML:
+```yaml
+tests:
+  - name: "Validación de orden con API externa simulada"
+    payload:
+      body:
+        order_id: "ORD-99"
+        amount: 50.0
+    mocks:
+      external_payment:
+        status: "PAID"
+        transaction_id: "tx-mock-123"
+    assertions:
+      - "{{external_payment.status}} == 'PAID'"
+      - "{{external_payment.transaction_id}} == 'tx-mock-123'"
+```
+
+---
+
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 108 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite de 115 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest

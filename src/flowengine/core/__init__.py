@@ -15,6 +15,15 @@ from flowengine.core.models import (
 from flowengine.core.runner import FlowRunner
 from flowengine.core.scheduler import SchedulerService, compute_next_run, match_cron
 from flowengine.core.security import compute_hmac_sha256, verify_webhook_auth, verify_webhook_signature
+from flowengine.core.testing import (
+    AssertionResult,
+    FlowTestCase,
+    TestCaseResult,
+    TestSuiteResult,
+    load_test_cases_from_file,
+    run_flow_test,
+    run_flow_test_suite,
+)
 from flowengine.core.throttling import FlowThrottler, default_throttler, parse_rate_limit
 
 __all__ = [
@@ -25,6 +34,7 @@ __all__ = [
     "FlowDefinition",
     "FlowRunner",
     "FlowStatus",
+    "FlowTestCase",
     "FlowThrottler",
     "NodeDefinition",
     "NodeStatus",
@@ -32,13 +42,19 @@ __all__ = [
     "SafeConditionEvaluator",
     "SchedulerService",
     "StepResult",
+    "AssertionResult",
+    "TestCaseResult",
+    "TestSuiteResult",
     "compute_hmac_sha256",
     "compute_next_run",
     "default_throttler",
     "get_nested_value",
+    "load_test_cases_from_file",
     "match_cron",
     "parse_rate_limit",
     "resolve_expression",
+    "run_flow_test",
+    "run_flow_test_suite",
     "verify_webhook_auth",
     "verify_webhook_signature",
 ]

@@ -15,10 +15,16 @@ from flowengine.cli.visualizer import (
     print_flow_tree,
     print_run_result,
     print_runs_history,
+    print_test_suite_results,
 )
 from flowengine.core.dag import DAGGraph, DAGValidationError
 from flowengine.core.models import FlowDefinition
 from flowengine.core.runner import FlowRunner, retry_failed_run
+from flowengine.core.testing import (
+    FlowTestCase,
+    load_test_cases_from_file,
+    run_flow_test_suite,
+)
 from flowengine.nodes.registry import list_available_nodes
 from flowengine.storage.repository import FlowRepository
 
@@ -252,6 +258,64 @@ def retry(
         console.print("[dim green][OK] Reintento finalizado y registrado en la base de datos.[/dim green]")
     except Exception as exc:
         console.print(f"[bold red][ERROR] No se pudo reintentar la ejecución:[/bold red] {exc}")
+        raise typer.Exit(code=1)
+
+
+@app.command(name="test")
+def test_flow(
+    path: Path = typer.Argument(..., help="Ruta al archivo del flujo (.yaml o .json)"),
+    test_file: Path | None = typer.Option(
+        None, "--test-file", "-t", help="Ruta al archivo de casos de prueba (.yaml/.json)"
+    ),
+    payload: str | None = typer.Option(
+        None, "--payload", "-p", help="Payload del trigger en formato JSON para un test rápido"
+    ),
+    mocks: str | None = typer.Option(
+        None, "--mocks", "-m", help="Mocks de nodos en formato JSON o ruta a archivo JSON"
+    ),
+    assert_expr: list[str] | None = typer.Option(
+        None, "--assert", "-a", help="Expresiones de aserción a validar (puede repetirse)"
+    ),
+) -> None:
+    """Ejecuta pruebas unitarias y de integración sobre un flujo con aislamiento de mocks."""
+    flow = load_flow_from_file(path)
+
+    cases: list[FlowTestCase] = []
+
+    if test_file:
+        cases = load_test_cases_from_file(test_file)
+    else:
+        # Construir caso de prueba al vuelo desde CLI
+        payload_data = {}
+        if payload:
+            try:
+                payload_data = json.loads(payload)
+            except Exception as e:
+                raise typer.BadParameter(f"JSON de payload inválido: {e}")
+
+        mocks_data = {}
+        if mocks:
+            if Path(mocks).exists():
+                mocks_data = json.loads(Path(mocks).read_text(encoding="utf-8"))
+            else:
+                try:
+                    mocks_data = json.loads(mocks)
+                except Exception as e:
+                    raise typer.BadParameter(f"JSON de mocks inválido: {e}")
+
+        cases.append(
+            FlowTestCase(
+                name="Prueba CLI ad-hoc",
+                payload=payload_data,
+                mocks=mocks_data,
+                assertions=assert_expr or [],
+            )
+        )
+
+    suite_result = asyncio.run(run_flow_test_suite(flow, cases))
+    print_test_suite_results(suite_result)
+
+    if not suite_result.passed:
         raise typer.Exit(code=1)
 
 

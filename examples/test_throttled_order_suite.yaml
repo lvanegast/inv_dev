@@ -1,0 +1,39 @@
+# Suite de pruebas declarativas para 'examples/throttled_order_flow.yaml'
+tests:
+  - name: "Aprobación de orden con monto válido y cálculo de comisión"
+    description: "Verifica que una orden con total positivo se apruebe y genere el fee esperado"
+    payload:
+      body:
+        order_id: "ORD-999"
+        customer: "Ada Lovelace"
+        amount: 200.0
+    assertions:
+      - "{{process_order.status}} == 'APPROVED'"
+      - "{{process_order.order_id}} == 'ORD-999'"
+      - "{{process_order.fee}} == 5.0"
+
+  - name: "Rechazo de orden con monto cero"
+    description: "Verifica que montos en cero o negativos resulten en estado REJECTED"
+    payload:
+      body:
+        order_id: "ORD-000"
+        customer: "Alan Turing"
+        amount: 0.0
+    assertions:
+      - "{{process_order.status}} == 'REJECTED'"
+      - "{{process_order.fee}} == 0.0"
+
+  - name: "Aislamiento de nodo externo con Mock"
+    description: "Inyecta una respuesta mock directamente en el nodo de procesamiento"
+    payload:
+      body:
+        order_id: "ORD-MOCK-1"
+        amount: 50.0
+    mocks:
+      process_order:
+        order_id: "ORD-MOCK-1"
+        status: "MOCKED_APPROVED"
+        fee: 1.25
+    assertions:
+      - "{{process_order.status}} == 'MOCKED_APPROVED'"
+      - "{{process_order.fee}} == 1.25"

@@ -29,10 +29,12 @@ class FlowRunner:
         self,
         flow: FlowDefinition,
         on_event: EventCallback | None = None,
+        mocks: dict[str, Any] | None = None,
     ) -> None:
         self.flow = flow
         self.dag = DAGGraph(flow)
         self.on_event = on_event
+        self.mocks = mocks or {}
 
     async def _emit_event(self, event_type: str, data: dict[str, Any]) -> None:
         """Emite un evento de ciclo de vida al listener configurado si existe."""
@@ -254,6 +256,37 @@ class FlowRunner:
                 "timestamp": started_at.isoformat(),
             },
         )
+
+        # Si el nodo tiene una respuesta mock definida (Testing / Dry-run)
+        if self.mocks and node_id in self.mocks:
+            mock_output = self.mocks[node_id]
+            finished_at = datetime.now(UTC)
+            step_res = StepResult(
+                node_id=node_id,
+                status=NodeStatus.SUCCESS,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_ms=0.1,
+                input_data={"__mocked__": True},
+                output_data=mock_output,
+            )
+            run.step_results[node_id] = step_res
+            context[node_id] = mock_output
+            context[f"__node_status_{node_id}"] = "success"
+            await self._emit_event(
+                "node_finished",
+                {
+                    "run_id": run.run_id,
+                    "node_id": node_id,
+                    "status": NodeStatus.SUCCESS.value,
+                    "duration_ms": 0.1,
+                    "error": None,
+                    "output_data": mock_output,
+                    "mocked": True,
+                },
+            )
+            return node_id, NodeStatus.SUCCESS
+
         retries_left = node_def.retry_count
         delay = node_def.retry_delay_seconds
         last_error: Exception | None = None
