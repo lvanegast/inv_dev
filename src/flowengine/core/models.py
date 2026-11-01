@@ -37,6 +37,21 @@ class ConnectionType(StrEnum):
     CUSTOM = "custom"
 
 
+class AlertChannel(StrEnum):
+    WEBHOOK = "webhook"
+    SLACK = "slack"
+    DISCORD = "discord"
+
+
+class AlertConfig(BaseModel):
+    """Configuración declarativa de alertas y notificaciones ante fallos."""
+
+    channel: AlertChannel = Field(default=AlertChannel.WEBHOOK, description="Canal de notificación")
+    webhook_url: str = Field(description="URL de destino donde despachar la alerta")
+    on_dlq_only: bool = Field(default=False, description="Disparar únicamente si la corrida entra a la DLQ")
+    custom_headers: dict[str, str] = Field(default_factory=dict, description="Cabeceras HTTP personalizadas")
+
+
 class ConnectionDefinition(BaseModel):
     """Definición de credenciales / conexión en el Connection Vault."""
 
@@ -98,6 +113,10 @@ class FlowDefinition(BaseModel):
     rate_limit: str | None = Field(
         default=None,
         description="Límite de tasa de peticiones (ej. '10/s', '60/m', '1000/h', '5000/d')",
+    )
+    alerts: list[AlertConfig] = Field(
+        default_factory=list,
+        description="Canales de notificación y alerta disparados ante fallos del flujo",
     )
 
     def get_node(self, node_id: str) -> NodeDefinition | None:

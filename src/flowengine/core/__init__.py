@@ -1,8 +1,11 @@
 """Módulos centrales del motor FlowEngine."""
 
+from flowengine.core.alerting import build_alert_payload, dispatch_flow_failure_alerts
 from flowengine.core.dag import DAGGraph, DAGValidationError
 from flowengine.core.expressions import SafeConditionEvaluator, get_nested_value, resolve_expression
 from flowengine.core.models import (
+    AlertChannel,
+    AlertConfig,
     ConnectionDefinition,
     ConnectionType,
     EdgeDefinition,
@@ -31,6 +34,8 @@ from flowengine.core.throttling import FlowThrottler, default_throttler, parse_r
 from flowengine.core.vault import decrypt_data, encrypt_data
 
 __all__ = [
+    "AlertChannel",
+    "AlertConfig",
     "AssertionResult",
     "ConnectionDefinition",
     "ConnectionType",
@@ -54,10 +59,12 @@ __all__ = [
     "TestCaseResult",
     "TestSuiteResult",
     "TraceContext",
+    "build_alert_payload",
     "compute_hmac_sha256",
     "compute_next_run",
     "decrypt_data",
     "default_throttler",
+    "dispatch_flow_failure_alerts",
     "encrypt_data",
     "get_nested_value",
     "load_test_cases_from_file",

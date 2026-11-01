@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-140%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-146%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -438,9 +438,31 @@ nodes:
 
 ---
 
+## 🚨 Alertas Automáticas ante Fallos (Alerting Hooks & DLQ)
+
+FlowEngine incluye un subsistema de notificaciones proactivas que dispara alertas inmediatas ante fallos críticos de ejecución sin interrumpir ni bloquear el ciclo de vida del motor:
+
+```yaml
+id: critical-payment-flow
+name: "Procesamiento de Pagos Críticos"
+alerts:
+  - channel: webhook
+    webhook_url: "https://monitoring.internal/api/v1/flow-failures"
+  - channel: slack
+    webhook_url: "{{env.SLACK_DEV_ALERTS_WEBHOOK}}"
+  - channel: discord
+    webhook_url: "{{env.DISCORD_OPS_WEBHOOK}}"
+```
+
+- **Formatos Nativos:** Genera bloques estructurados adaptados para **Slack Incoming Webhooks** (con markdown, estatus y campos destacados) y **Discord Embeds** (con colores semánticos, timestamps e identificadores de corrida).
+- **Aislamiento Total:** El despacho de alertas ocurre de forma asíncrona y segura; cualquier error de red en el webhook receptor es capturado y registrado como advertencia sin afectar el resultado de la corrida.
+- **Auditoría Paso a Paso:** Cada alerta incluye el `run_id`, el `flow_id`, el mensaje de error principal y el desglose de los pasos que fallaron.
+
+---
+
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite de 125 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite completa de 146 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest

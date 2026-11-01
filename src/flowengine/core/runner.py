@@ -137,6 +137,13 @@ class FlowRunner:
         if any_failed:
             run.status = RunStatus.FAILED
             root_span.finish(status="ERROR")
+            if self.flow.alerts:
+                try:
+                    from flowengine.core.alerting import dispatch_flow_failure_alerts
+
+                    await dispatch_flow_failure_alerts(self.flow, run)
+                except Exception as alert_err:
+                    logger.warning(f"Error al despachar alertas de fallo: {alert_err}")
         else:
             run.status = RunStatus.SUCCESS
             root_span.finish(status="OK")

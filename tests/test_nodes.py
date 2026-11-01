@@ -1,6 +1,5 @@
 """Pruebas unitarias para nodos individuales de FlowEngine."""
 
-import httpx
 import pytest
 
 from flowengine.core.models import NodeDefinition
@@ -127,7 +126,9 @@ async def test_http_request_action(monkeypatch):
     async def mock_request(*args, **kwargs):
         return MockResponse()
 
-    monkeypatch.setattr(httpx.AsyncClient, "request", mock_request)
+    from flowengine.nodes import actions_http
+
+    monkeypatch.setattr(actions_http.get_shared_http_client(), "request", mock_request)
 
     node = HttpRequestAction(
         NodeDefinition(
