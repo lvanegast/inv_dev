@@ -43,6 +43,19 @@ CREATE TABLE IF NOT EXISTS connections (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS flow_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    flow_id TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    definition_json TEXT NOT NULL,
+    changelog TEXT DEFAULT '',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(flow_id) REFERENCES flows(id) ON DELETE CASCADE,
+    UNIQUE(flow_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_flow_versions_flow_id ON flow_versions(flow_id, version DESC);
+
 CREATE INDEX IF NOT EXISTS idx_runs_flow_id ON runs(flow_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at DESC);

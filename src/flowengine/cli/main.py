@@ -14,6 +14,7 @@ from flowengine.cli.visualizer import (
     print_connections_table,
     print_dlq_runs,
     print_flow_tree,
+    print_flow_versions_table,
     print_run_result,
     print_runs_history,
     print_test_suite_results,
@@ -317,6 +318,47 @@ def test_flow(
     print_test_suite_results(suite_result)
 
     if not suite_result.passed:
+        raise typer.Exit(code=1)
+
+
+@app.command(name="versions")
+def list_flow_versions(
+    flow_id: str = typer.Argument(..., help="ID del flujo del cual consultar versiones"),
+) -> None:
+    """Consulta el historial inmutable de versiones de un flujo."""
+    repo = FlowRepository()
+
+    async def _fetch():
+        await repo.initialize()
+        return await repo.get_flow_versions(flow_id)
+
+    versions = asyncio.run(_fetch())
+    if not versions:
+        console.print(f"[yellow]No se encontraron versiones registradas para el flujo '{flow_id}'.[/yellow]")
+        return
+    print_flow_versions_table(flow_id, versions)
+
+
+@app.command(name="rollback")
+def rollback_flow_cmd(
+    flow_id: str = typer.Argument(..., help="ID del flujo que se desea revertir"),
+    version: int = typer.Argument(..., help="Número de versión a la que se desea retornar (ej. 1)"),
+) -> None:
+    """Revierte un flujo a una versión histórica previa."""
+    repo = FlowRepository()
+
+    async def _do_rollback():
+        await repo.initialize()
+        return await repo.rollback_flow(flow_id, version)
+
+    try:
+        restored = asyncio.run(_do_rollback())
+        console.print(
+            f"[bold green][OK] Flujo '{flow_id}' revertido exitosamente a la versión v{version}.[/bold green]"
+        )
+        print_flow_tree(restored)
+    except Exception as exc:
+        console.print(f"[bold red][ERROR] No se pudo revertir el flujo:[/bold red] {exc}")
         raise typer.Exit(code=1)
 
 

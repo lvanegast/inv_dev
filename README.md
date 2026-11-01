@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-131%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-135%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -390,6 +390,23 @@ nodes:
       method: "POST"
       connection_id: "stripe-prod"  # Inyecta automáticamente Authorization: Bearer ...
 ```
+
+---
+
+## 📜 Versionado Inmutable y Rollback de Flujos
+
+Cada modificación sobre un flujo genera automáticamente una versión histórica inmutable (`v1`, `v2`, `v3`...) archivada en SQLite, garantizando trazabilidad y capacidad de recuperación inmediata ante errores:
+
+```powershell
+# Consultar el historial de versiones de un flujo
+uv run flow versions throttled-order-flow
+
+# Revertir instantáneamente a una versión previa
+uv run flow rollback throttled-order-flow 1
+```
+
+- **Rollback Instantáneo:** Reestablece la arquitectura de nodos, disparador y aristas de la versión objetivo y crea una nueva versión de auditoría.
+- **Integración con Dashboard Web:** Botón `📜 Versiones` en la cabecera del DAG con modal interactivo para consultar cambios y ejecutar rollbacks con un clic.
 
 ---
 

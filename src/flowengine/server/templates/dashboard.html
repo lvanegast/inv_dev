@@ -398,6 +398,34 @@
     </div>
   </div>
 
+  <!-- Flow Versions & Rollback Modal -->
+  <div id="versions-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900/90">
+        <div>
+          <h3 class="text-sm font-bold text-white flex items-center space-x-2">
+            <span>📜 Historial de Versiones y Rollback</span>
+            <span id="versions-flow-id" class="text-xs font-mono text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded"></span>
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">Versiones inmutables archivadas en SQLite. Puedes restaurar cualquier versión histórica.</p>
+        </div>
+        <button onclick="closeVersionsModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+          ✕
+        </button>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-3">
+        <div id="versions-list-container" class="space-y-2"></div>
+      </div>
+
+      <div class="px-6 py-3 border-t border-slate-800 bg-slate-900 flex justify-end">
+        <button onclick="closeVersionsModal()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-medium rounded-lg text-slate-200 transition">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Client-side Logic -->
   <script>
     let registeredFlows = [];
@@ -516,6 +544,7 @@
       tagsContainer.innerHTML = `
         <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">${flow.id}</span>
         <span class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">${flow.status || 'active'}</span>
+        <button onclick="openVersionsModal()" class="text-xs px-2 py-0.5 rounded bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/30 transition" title="Historial de versiones y rollback">📜 Versiones</button>
         <button onclick="window.open('/api/flows/' + currentFlow.id + '/export.yaml')" class="text-xs px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition" title="Descargar definición YAML">⬇️ YAML</button>
         <button onclick="window.open('/api/flows/' + currentFlow.id + '/docs', '_blank')" class="text-xs px-2 py-0.5 rounded bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 transition" title="Ver documentación OpenAPI">📖 Swagger</button>
       `;
@@ -1261,6 +1290,77 @@
         }
       } catch (err) {
         alert('Error de conexión al guardar: ' + err.message);
+      }
+    }
+
+    async function openVersionsModal() {
+      if (!currentFlow) return;
+      document.getElementById('versions-flow-id').textContent = currentFlow.id;
+      const container = document.getElementById('versions-list-container');
+      container.innerHTML = '<div class="text-xs text-slate-500 py-4 text-center">Cargando versiones...</div>';
+      document.getElementById('versions-modal').classList.remove('hidden');
+
+      try {
+        const res = await fetch(`/api/flows/${currentFlow.id}/versions`);
+        if (!res.ok) {
+          container.innerHTML = '<div class="text-xs text-red-400 py-4 text-center">Error al cargar versiones.</div>';
+          return;
+        }
+        const versions = await res.json();
+        if (versions.length === 0) {
+          container.innerHTML = '<div class="text-xs text-slate-500 py-4 text-center">No hay versiones registradas aún.</div>';
+          return;
+        }
+
+        container.innerHTML = versions.map((v, i) => `
+          <div class="p-3 bg-slate-950 border border-slate-800 rounded-lg flex items-center justify-between text-xs">
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-purple-400 font-mono">v${v.version}</span>
+                <span class="text-white font-medium">${escapeHtml(v.changelog || 'Sin descripción')}</span>
+                ${i === 0 ? '<span class="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-semibold">ACTIVA</span>' : ''}
+              </div>
+              <div class="text-slate-500 text-[10px] mt-1">
+                ${v.node_count} nodos • ${new Date(v.created_at).toLocaleString()}
+              </div>
+            </div>
+            ${i > 0 ? `
+              <button onclick="rollbackToVersion(${v.version})" class="px-2.5 py-1 bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 border border-purple-500/30 rounded text-xs transition flex items-center space-x-1">
+                <span>🔄</span>
+                <span>Restaurar v${v.version}</span>
+              </button>
+            ` : '<span class="text-slate-500 text-[10px]">Versión Actual</span>'}
+          </div>
+        `).join('');
+      } catch (e) {
+        container.innerHTML = `<div class="text-xs text-red-400 py-4 text-center">Error: ${e.message}</div>`;
+      }
+    }
+
+    function closeVersionsModal() {
+      document.getElementById('versions-modal').classList.add('hidden');
+    }
+
+    async function rollbackToVersion(version) {
+      if (!confirm(`¿Estás seguro de restaurar el flujo '${currentFlow.id}' a la versión v${version}?`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/flows/${currentFlow.id}/rollback/${version}`, {
+          method: 'POST'
+        });
+        const data = await res.json();
+        if (res.ok) {
+          alert(`✅ Flujo revertido exitosamente a la versión v${version}!`);
+          closeVersionsModal();
+          await fetchFlows();
+          selectFlow(currentFlow.id);
+        } else {
+          alert('❌ Error al revertir: ' + (data.detail || JSON.stringify(data)));
+        }
+      } catch (e) {
+        alert('❌ Error de conexión al revertir: ' + e.message);
       }
     }
 

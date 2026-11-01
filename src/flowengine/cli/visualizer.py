@@ -253,3 +253,26 @@ def print_connections_table(connections: list[Any]) -> None:
         )
 
     console.print(table)
+
+
+def print_flow_versions_table(flow_id: str, versions: list[dict[str, Any]]) -> None:
+    """Muestra el historial de versiones inmutables de un flujo."""
+    table = Table(
+        title=f"Historial de Versiones - Flujo: {flow_id}",
+        show_lines=True,
+        header_style="bold magenta",
+    )
+    table.add_column("Versión", style="bold yellow", justify="center")
+    table.add_column("Changelog / Descripción", style="bold white")
+    table.add_column("Nodos", justify="center")
+    table.add_column("Fecha de Creación", justify="center")
+
+    for v in versions:
+        table.add_row(
+            f"v{v['version']}",
+            v.get("changelog") or "-",
+            str(v.get("node_count", 0)),
+            str(v.get("created_at", ""))[:19],
+        )
+
+    console.print(table)

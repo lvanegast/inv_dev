@@ -17,8 +17,8 @@ class FlowRepository:
     async def initialize(self) -> None:
         await self.db_manager.init_db()
 
-    async def save_flow(self, flow: FlowDefinition) -> None:
-        """Guarda o actualiza la definición de un flujo."""
+    async def save_flow(self, flow: FlowDefinition, changelog: str = "") -> int:
+        """Guarda o actualiza la definición de un flujo creando una versión histórica inmutable."""
         flow_json = flow.model_dump_json()
         async with self.db_manager.get_connection() as db:
             await db.execute(
@@ -32,7 +32,82 @@ class FlowRepository:
                 """,
                 (flow.id, flow.name, flow_json),
             )
+
+            # Calcular la siguiente versión correlativa
+            async with db.execute(
+                "SELECT COALESCE(MAX(version), 0) + 1 AS next_ver FROM flow_versions WHERE flow_id = ?",
+                (flow.id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+                next_ver = row["next_ver"] if row else 1
+
+            # Guardar snapshot inmutable en el historial
+            await db.execute(
+                """
+                INSERT INTO flow_versions (flow_id, version, definition_json, changelog)
+                VALUES (?, ?, ?, ?)
+                """,
+                (flow.id, next_ver, flow_json, changelog or f"Versión {next_ver}"),
+            )
             await db.commit()
+            return next_ver
+
+    async def get_flow_versions(self, flow_id: str) -> list[dict[str, Any]]:
+        """Recupera el historial completo de versiones de un flujo."""
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute(
+                """
+                SELECT version, changelog, created_at, definition_json
+                FROM flow_versions
+                WHERE flow_id = ?
+                ORDER BY version DESC
+                """,
+                (flow_id,),
+            ) as cursor,
+        ):
+            rows = await cursor.fetchall()
+            results = []
+            for r in rows:
+                try:
+                    data = json.loads(r["definition_json"])
+                    node_count = len(data.get("nodes", []))
+                except Exception:
+                    node_count = 0
+
+                results.append(
+                    {
+                        "flow_id": flow_id,
+                        "version": r["version"],
+                        "changelog": r["changelog"],
+                        "created_at": r["created_at"],
+                        "node_count": node_count,
+                    }
+                )
+            return results
+
+    async def get_flow_version(self, flow_id: str, version: int) -> FlowDefinition | None:
+        """Recupera la definición exacta de un flujo en una versión específica."""
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute(
+                "SELECT definition_json FROM flow_versions WHERE flow_id = ? AND version = ?",
+                (flow_id, version),
+            ) as cursor,
+        ):
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return FlowDefinition.model_validate_json(row["definition_json"])
+
+    async def rollback_flow(self, flow_id: str, target_version: int) -> FlowDefinition:
+        """Revierte un flujo a una versión previa, creando una nueva versión de rollback."""
+        target_flow = await self.get_flow_version(flow_id, target_version)
+        if not target_flow:
+            raise ValueError(f"La versión {target_version} del flujo '{flow_id}' no existe.")
+
+        await self.save_flow(target_flow, changelog=f"Rollback a versión v{target_version}")
+        return target_flow
 
     async def get_flow(self, flow_id: str) -> FlowDefinition | None:
         """Recupera un flujo por su ID."""

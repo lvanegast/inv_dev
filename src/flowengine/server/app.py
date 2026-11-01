@@ -226,11 +226,49 @@ async def get_flow_swagger_docs(flow_id: str, request: Request) -> HTMLResponse:
 
 
 @app.post("/api/flows")
-async def register_flow(flow: FlowDefinition) -> dict[str, str]:
-    await repo.save_flow(flow)
+async def register_flow(flow: FlowDefinition) -> dict[str, Any]:
+    ver = await repo.save_flow(flow)
     if scheduler._running:
         await scheduler.reload_flows()
-    return {"message": "Flujo registrado exitosamente", "flow_id": flow.id}
+    return {"message": "Flujo registrado exitosamente", "flow_id": flow.id, "version": ver}
+
+
+@app.get("/api/flows/{flow_id}/versions")
+async def get_flow_versions_endpoint(flow_id: str) -> list[dict[str, Any]]:
+    """Obtiene el historial completo de versiones de un flujo."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flujo con ID '{flow_id}' no encontrado.")
+    return await repo.get_flow_versions(flow_id)
+
+
+@app.get("/api/flows/{flow_id}/versions/{version}")
+async def get_flow_version_detail(flow_id: str, version: int) -> FlowDefinition:
+    """Obtiene la definición de un flujo en una versión específica."""
+    v_flow = await repo.get_flow_version(flow_id, version)
+    if not v_flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Versión {version} no encontrada para el flujo '{flow_id}'.",
+        )
+    return v_flow
+
+
+@app.post("/api/flows/{flow_id}/rollback/{version}")
+async def rollback_flow_endpoint(flow_id: str, version: int) -> dict[str, Any]:
+    """Revierte un flujo a una versión histórica específica."""
+    try:
+        restored = await repo.rollback_flow(flow_id, version)
+        if scheduler._running:
+            await scheduler.reload_flows()
+        return {
+            "message": f"Flujo revertido exitosamente a la versión {version}",
+            "flow_id": flow_id,
+            "target_version": version,
+            "flow": restored,
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 @app.post("/api/flows/validate")
