@@ -3,6 +3,8 @@
 from flowengine.core.dag import DAGGraph, DAGValidationError
 from flowengine.core.expressions import SafeConditionEvaluator, get_nested_value, resolve_expression
 from flowengine.core.models import (
+    ConnectionDefinition,
+    ConnectionType,
     EdgeDefinition,
     ExecutionRun,
     FlowDefinition,
@@ -26,8 +28,12 @@ from flowengine.core.testing import (
     run_flow_test_suite,
 )
 from flowengine.core.throttling import FlowThrottler, default_throttler, parse_rate_limit
+from flowengine.core.vault import decrypt_data, encrypt_data
 
 __all__ = [
+    "AssertionResult",
+    "ConnectionDefinition",
+    "ConnectionType",
     "DAGGraph",
     "DAGValidationError",
     "EdgeDefinition",
@@ -50,7 +56,9 @@ __all__ = [
     "TraceContext",
     "compute_hmac_sha256",
     "compute_next_run",
+    "decrypt_data",
     "default_throttler",
+    "encrypt_data",
     "get_nested_value",
     "load_test_cases_from_file",
     "match_cron",

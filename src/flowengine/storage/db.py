@@ -34,6 +34,15 @@ CREATE TABLE IF NOT EXISTS runs (
     FOREIGN KEY(flow_id) REFERENCES flows(id)
 );
 
+CREATE TABLE IF NOT EXISTS connections (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    encrypted_data TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_runs_flow_id ON runs(flow_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at DESC);

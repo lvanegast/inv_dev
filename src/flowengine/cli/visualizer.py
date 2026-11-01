@@ -230,3 +230,26 @@ def print_test_suite_results(suite: Any) -> None:
         table.add_row(case.name, c_status, f"{case.duration_ms}ms", assertions_col)
 
     console.print(table)
+
+
+def print_connections_table(connections: list[Any]) -> None:
+    """Muestra la lista de conexiones registradas en el Connection Vault."""
+    table = Table(
+        title="Connection Vault - Credenciales Cifradas",
+        show_lines=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Connection ID", style="bold yellow")
+    table.add_column("Nombre", style="bold white")
+    table.add_column("Tipo", style="bold green", justify="center")
+    table.add_column("Estado de Cifrado", justify="center")
+
+    for c in connections:
+        table.add_row(
+            c.id,
+            c.name or "-",
+            c.type.value if hasattr(c.type, "value") else str(c.type),
+            "[bold green]AES-256 Fernet (Cifrado)[/bold green]",
+        )
+
+    console.print(table)

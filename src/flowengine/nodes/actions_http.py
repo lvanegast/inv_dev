@@ -45,6 +45,30 @@ class HttpRequestAction(BaseNode):
         data_body = cfg.get("data")
         timeout_seconds = float(cfg.get("timeout", 30.0))
 
+        # Connection Vault resolution
+        conn_id = cfg.get("connection_id")
+        if conn_id:
+            conn_data = None
+            if "__connections__" in context and conn_id in context["__connections__"]:
+                conn_data = context["__connections__"][conn_id]
+            else:
+                from flowengine.storage.repository import FlowRepository
+                repo = FlowRepository()
+                conn_def = await repo.get_connection(conn_id, decrypt=True)
+                if conn_def:
+                    conn_data = conn_def.data
+
+            if conn_data:
+                if "api_key" in conn_data:
+                    header_name = conn_data.get("header_name", "X-API-Key")
+                    headers[header_name] = conn_data["api_key"]
+                if "bearer_token" in conn_data:
+                    headers["Authorization"] = f"Bearer {conn_data['bearer_token']}"
+                if "username" in conn_data and "password" in conn_data:
+                    auth = (conn_data["username"], conn_data["password"])
+                if "headers" in conn_data and isinstance(conn_data["headers"], dict):
+                    headers.update(conn_data["headers"])
+
         # Auth support: Bearer or Basic
         auth = None
         if "auth_bearer" in cfg:

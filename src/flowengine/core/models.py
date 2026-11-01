@@ -30,6 +30,27 @@ class FlowStatus(StrEnum):
     PAUSED = "paused"
 
 
+class ConnectionType(StrEnum):
+    API_KEY = "api_key"
+    BEARER = "bearer"
+    BASIC = "basic"
+    CUSTOM = "custom"
+
+
+class ConnectionDefinition(BaseModel):
+    """Definición de credenciales / conexión en el Connection Vault."""
+
+    id: str = Field(description="Identificador único de la conexión (ej. 'stripe-prod')")
+    name: str = Field(default="", description="Nombre amigable de la conexión")
+    type: ConnectionType = Field(default=ConnectionType.API_KEY, description="Tipo de autenticación")
+    data: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Datos de credenciales en texto plano (se cifran al persistir)",
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class NodeDefinition(BaseModel):
     """Definición de un nodo o paso dentro del flujo."""
 

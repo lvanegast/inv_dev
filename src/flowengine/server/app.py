@@ -15,7 +15,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
 
 from flowengine.core.dag import DAGGraph, DAGValidationError
-from flowengine.core.models import FlowDefinition
+from flowengine.core.models import ConnectionDefinition, FlowDefinition
 from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.core.scheduler import SchedulerService
 from flowengine.core.security import verify_webhook_auth
@@ -267,6 +267,57 @@ async def export_flow_yaml(flow_id: str) -> PlainTextResponse:
         media_type="application/x-yaml",
         headers={"Content-Disposition": f'attachment; filename="{flow_id}.yaml"'},
     )
+
+
+@app.get("/api/connections")
+async def list_connections_endpoint() -> list[dict[str, Any]]:
+    """Lista las conexiones registradas con datos de credenciales protegidos."""
+    connections = await repo.list_connections(decrypt=False)
+    return [
+        {
+            "id": c.id,
+            "name": c.name,
+            "type": c.type.value,
+            "created_at": c.created_at.isoformat(),
+        }
+        for c in connections
+    ]
+
+
+@app.post("/api/connections")
+async def create_connection_endpoint(connection: ConnectionDefinition) -> dict[str, str]:
+    """Registra y cifra una nueva conexión en el Connection Vault."""
+    await repo.save_connection(connection)
+    return {"message": "Conexión guardada exitosamente", "connection_id": connection.id}
+
+
+@app.get("/api/connections/{connection_id}")
+async def get_connection_endpoint(connection_id: str) -> dict[str, Any]:
+    """Obtiene información de una conexión registrada."""
+    conn = await repo.get_connection(connection_id, decrypt=False)
+    if not conn:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Conexión '{connection_id}' no encontrada en el vault.",
+        )
+    return {
+        "id": conn.id,
+        "name": conn.name,
+        "type": conn.type.value,
+        "created_at": conn.created_at.isoformat(),
+    }
+
+
+@app.delete("/api/connections/{connection_id}")
+async def delete_connection_endpoint(connection_id: str) -> dict[str, Any]:
+    """Elimina una conexión del vault."""
+    deleted = await repo.delete_connection(connection_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Conexión '{connection_id}' no encontrada para eliminar.",
+        )
+    return {"message": "Conexión eliminada exitosamente", "connection_id": connection_id}
 
 
 @app.post("/api/flows/{flow_id}/run")

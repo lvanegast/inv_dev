@@ -3,7 +3,8 @@
 import json
 from typing import Any
 
-from flowengine.core.models import ExecutionRun, FlowDefinition
+from flowengine.core.models import ConnectionDefinition, ConnectionType, ExecutionRun, FlowDefinition
+from flowengine.core.vault import decrypt_data, encrypt_data
 from flowengine.storage.db import DatabaseManager
 
 
@@ -201,3 +202,74 @@ class FlowRepository:
                 "avg_duration_ms": avg_duration_ms,
                 "success_rate": success_rate,
             }
+
+    async def save_connection(self, connection: ConnectionDefinition) -> None:
+        """Cifra y guarda o actualiza una conexión en la base de datos."""
+        encrypted_str = encrypt_data(connection.data)
+        async with self.db_manager.get_connection() as db:
+            await db.execute(
+                """
+                INSERT INTO connections (id, name, type, encrypted_data, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    type = excluded.type,
+                    encrypted_data = excluded.encrypted_data,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (connection.id, connection.name, connection.type.value, encrypted_str),
+            )
+            await db.commit()
+
+    async def get_connection(
+        self, connection_id: str, decrypt: bool = True
+    ) -> ConnectionDefinition | None:
+        """Recupera una conexión por su ID, descifrando opcionalmente sus credenciales."""
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute(
+                "SELECT id, name, type, encrypted_data, created_at, updated_at FROM connections WHERE id = ?",
+                (connection_id,),
+            ) as cursor,
+        ):
+            row = await cursor.fetchone()
+            if not row:
+                return None
+
+            data = decrypt_data(row["encrypted_data"]) if decrypt else {}
+            return ConnectionDefinition(
+                id=row["id"],
+                name=row["name"],
+                type=ConnectionType(row["type"]),
+                data=data,
+            )
+
+    async def list_connections(self, decrypt: bool = False) -> list[ConnectionDefinition]:
+        """Lista todas las conexiones registradas."""
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute(
+                "SELECT id, name, type, encrypted_data, created_at, updated_at "
+                "FROM connections ORDER BY id ASC"
+            ) as cursor,
+        ):
+            rows = await cursor.fetchall()
+            results = []
+            for r in rows:
+                data = decrypt_data(r["encrypted_data"]) if decrypt else {}
+                results.append(
+                    ConnectionDefinition(
+                        id=r["id"],
+                        name=r["name"],
+                        type=ConnectionType(r["type"]),
+                        data=data,
+                    )
+                )
+            return results
+
+    async def delete_connection(self, connection_id: str) -> bool:
+        """Elimina una conexión del vault."""
+        async with self.db_manager.get_connection() as db:
+            cursor = await db.execute("DELETE FROM connections WHERE id = ?", (connection_id,))
+            await db.commit()
+            return cursor.rowcount > 0

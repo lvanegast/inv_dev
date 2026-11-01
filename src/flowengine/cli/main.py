@@ -11,6 +11,7 @@ import yaml
 from flowengine.cli.visualizer import (
     console,
     print_available_nodes,
+    print_connections_table,
     print_dlq_runs,
     print_flow_tree,
     print_run_result,
@@ -18,7 +19,7 @@ from flowengine.cli.visualizer import (
     print_test_suite_results,
 )
 from flowengine.core.dag import DAGGraph, DAGValidationError
-from flowengine.core.models import FlowDefinition
+from flowengine.core.models import ConnectionDefinition, ConnectionType, FlowDefinition
 from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.core.testing import (
     FlowTestCase,
@@ -316,6 +317,81 @@ def test_flow(
     print_test_suite_results(suite_result)
 
     if not suite_result.passed:
+        raise typer.Exit(code=1)
+
+
+connection_app = typer.Typer(
+    name="connection",
+    help="Gestión del Connection Vault (credenciales y conexiones cifradas)",
+    add_completion=False,
+)
+app.add_typer(connection_app, name="connection")
+
+
+@connection_app.command(name="add")
+def connection_add(
+    connection_id: str = typer.Argument(..., help="ID único de la conexión (ej. 'stripe-prod')"),
+    name: str = typer.Option("", "--name", "-n", help="Nombre descriptivo de la conexión"),
+    conn_type: str = typer.Option("api_key", "--type", "-t", help="Tipo (api_key, bearer, basic, custom)"),
+    data: str = typer.Option(..., "--data", "-d", help="Datos JSON de credenciales a cifrar"),
+) -> None:
+    """Registra y cifra una nueva conexión en el Connection Vault."""
+    try:
+        data_dict = json.loads(data)
+    except Exception as e:
+        raise typer.BadParameter(f"JSON de credenciales no válido: {e}")
+
+    try:
+        c_type = ConnectionType(conn_type.lower())
+    except ValueError:
+        raise typer.BadParameter(f"Tipo '{conn_type}' no válido. Opciones: api_key, bearer, basic, custom")
+
+    conn = ConnectionDefinition(id=connection_id, name=name or connection_id, type=c_type, data=data_dict)
+    repo = FlowRepository()
+
+    async def _save():
+        await repo.initialize()
+        await repo.save_connection(conn)
+
+    asyncio.run(_save())
+    console.print(
+        f"[bold green][OK] Conexión '{connection_id}' cifrada con "
+        "AES-256 Fernet y guardada exitosamente.[/bold green]"
+    )
+
+
+@connection_app.command(name="list")
+def connection_list() -> None:
+    """Lista todas las conexiones registradas en el Connection Vault."""
+    repo = FlowRepository()
+
+    async def _list():
+        await repo.initialize()
+        return await repo.list_connections(decrypt=False)
+
+    connections = asyncio.run(_list())
+    if not connections:
+        console.print("[yellow]No hay conexiones registradas en el Vault.[/yellow]")
+        return
+    print_connections_table(connections)
+
+
+@connection_app.command(name="delete")
+def connection_delete(
+    connection_id: str = typer.Argument(..., help="ID de la conexión a eliminar"),
+) -> None:
+    """Elimina una conexión del Connection Vault."""
+    repo = FlowRepository()
+
+    async def _del():
+        await repo.initialize()
+        return await repo.delete_connection(connection_id)
+
+    deleted = asyncio.run(_del())
+    if deleted:
+        console.print(f"[bold green][OK] Conexión '{connection_id}' eliminada del Vault.[/bold green]")
+    else:
+        console.print(f"[bold red][ERROR] Conexión '{connection_id}' no encontrada.[/bold red]")
         raise typer.Exit(code=1)
 
 

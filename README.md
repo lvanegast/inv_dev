@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-125%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-131%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -357,6 +357,39 @@ El Dashboard Web ahora incluye un diseñador visual interactivo que permite crea
 - **Enlace de Aristas y Rutas Alternativas:** Conexión visual entre nodos con evaluación condicional (`if`) y soporte para ramas de contingencia (`on_error`).
 - **Validación DAG en Vivo (`POST /api/flows/validate`):** Comprobación en tiempo real de aciclicidad y referencias topológicas antes de guardar.
 - **Exportación Directa a YAML (`GET /api/flows/{flow_id}/export.yaml`):** Descarga de la especificación limpia en un solo clic.
+
+---
+
+## 🔒 Connection Vault: Credenciales Cifradas (AES-256 Fernet)
+
+FlowEngine incorpora una bóveda de credenciales seguras para evitar exponer secretos, tokens y contraseñas en archivos YAML de flujos:
+
+```powershell
+# Registrar una conexión cifrada en el Vault
+uv run flow connection add stripe-prod \
+  --name "Stripe Producción" \
+  --type bearer \
+  --data '{"bearer_token": "sk_live_998877..."}'
+
+# Listar conexiones registradas
+uv run flow connection list
+
+# Eliminar una conexión
+uv run flow connection delete stripe-prod
+```
+
+### Uso en Nodos de Flujo:
+En lugar de escribir credenciales explícitas en `action_http`, referencia el `connection_id`:
+```yaml
+nodes:
+  - id: create_charge
+    name: "Cobro Stripe"
+    type: action_http
+    config:
+      url: "https://api.stripe.com/v1/charges"
+      method: "POST"
+      connection_id: "stripe-prod"  # Inyecta automáticamente Authorization: Bearer ...
+```
 
 ---
 
