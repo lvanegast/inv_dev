@@ -9,6 +9,7 @@ from flowengine.nodes.actions_batch import AggregatorNode, IteratorNode
 from flowengine.nodes.actions_filter import FilterAction
 from flowengine.nodes.actions_http import HttpRequestAction
 from flowengine.nodes.actions_log import LogAction
+from flowengine.nodes.actions_subflow import SubflowAction
 from flowengine.nodes.actions_transform import CodeAction, TransformAction
 from flowengine.nodes.base import BaseNode
 from flowengine.nodes.triggers import ManualTrigger, ScheduleTrigger, WebhookTrigger
@@ -26,6 +27,7 @@ BUILTIN_NODES: dict[str, type[BaseNode]] = {
     "action_log": LogAction,
     "action_iterator": IteratorNode,
     "action_aggregator": AggregatorNode,
+    "action_subflow": SubflowAction,
 }
 
 NODE_REGISTRY: dict[str, type[BaseNode]] = dict(BUILTIN_NODES)

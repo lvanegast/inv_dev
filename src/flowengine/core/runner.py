@@ -86,6 +86,7 @@ class FlowRunner:
             "__timestamp__": datetime.now(UTC).isoformat(),
             "__trace_context__": self.trace_context,
             "__trace_id__": self.trace_context.trace_id,
+            "__current_flow_id__": self.flow.id,
             "trigger": trigger_data,
         }
         if context_override:

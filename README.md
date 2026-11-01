@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-135%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-140%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -407,6 +407,34 @@ uv run flow rollback throttled-order-flow 1
 
 - **Rollback Instantáneo:** Reestablece la arquitectura de nodos, disparador y aristas de la versión objetivo y crea una nueva versión de auditoría.
 - **Integración con Dashboard Web:** Botón `📜 Versiones` en la cabecera del DAG con modal interactivo para consultar cambios y ejecutar rollbacks con un clic.
+
+---
+
+## 🔀 Subflujos Reutilizables y Modulares (`action_subflow`)
+
+Permite componer arquitecturas complejas reutilizando flujos existentes como sub-rutinas modulares:
+
+```yaml
+nodes:
+  - id: calculate_taxes
+    name: "Calcular Impuestos"
+    type: action_subflow
+    config:
+      flow_id: "calc-tax-subflow"
+      payload:
+        amount: "{{trigger.body.amount}}"
+      wait_for_completion: true  # O false para disparo en segundo plano (fire-and-forget)
+      timeout_seconds: 30.0
+
+  - id: send_invoice
+    name: "Emitir Factura"
+    type: action_log
+    config:
+      message: "Total con impuestos: {{calculate_taxes.outputs.compute.total}}"
+```
+
+- **Protección contra Ciclos:** Inspección de la pila de llamadas (`__call_stack__`) que previene recursión infinita o referencias circulares (`A -> B -> A`).
+- **Resiliencia & On Error:** Si el subflujo falla, el nodo padre activa automáticamente ramas `on_error` de rescate o dispara reintentos.
 
 ---
 

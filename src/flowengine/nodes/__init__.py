@@ -1,6 +1,7 @@
 """Nodos de FlowEngine."""
 
 from flowengine.nodes.actions_batch import AggregatorNode, IteratorNode
+from flowengine.nodes.actions_subflow import SubflowAction
 from flowengine.nodes.base import BaseNode
 from flowengine.nodes.registry import (
     BUILTIN_NODES,
@@ -17,6 +18,7 @@ __all__ = [
     "AggregatorNode",
     "BaseNode",
     "IteratorNode",
+    "SubflowAction",
     "BUILTIN_NODES",
     "NODE_REGISTRY",
     "create_node_instance",
