@@ -23,7 +23,7 @@ from flowengine.core.telemetry import TraceContext, telemetry
 from flowengine.core.throttling import default_throttler
 from flowengine.nodes.actions_http import close_shared_http_client
 from flowengine.nodes.registry import list_available_nodes
-from flowengine.server.openapi import generate_flow_openapi
+from flowengine.server.openapi import generate_flow_openapi, get_scalar_ui_html
 from flowengine.server.streaming import execution_broker, format_sse
 from flowengine.storage.repository import FlowRepository
 
@@ -51,8 +51,22 @@ app = FastAPI(
     title="FlowEngine Webhook Server",
     description="Servidor de alta concurrencia para recepción de Webhooks y orquestación de flujos",
     version="0.1.0",
+    docs_url=None,
+    redoc_url=None,
     lifespan=lifespan,
 )
+
+
+@app.get("/docs", response_class=HTMLResponse, include_in_schema=False)
+async def scalar_docs() -> HTMLResponse:
+    """Documentación interactiva de la API global basada en Scalar."""
+    return HTMLResponse(get_scalar_ui_html(openapi_url="/openapi.json", title="FlowEngine API Reference"))
+
+
+@app.get("/swagger", response_class=HTMLResponse, include_in_schema=False)
+async def swagger_docs() -> HTMLResponse:
+    """Documentación Swagger UI clásica de respaldo."""
+    return get_swagger_ui_html(openapi_url="/openapi.json", title="FlowEngine API - Swagger UI")
 
 
 @app.get("/health")
@@ -211,17 +225,19 @@ async def get_flow_openapi_spec(flow_id: str, request: Request) -> dict[str, Any
 
 
 @app.get("/api/flows/{flow_id}/docs", response_class=HTMLResponse)
-async def get_flow_swagger_docs(flow_id: str, request: Request) -> HTMLResponse:
-    """Proporciona documentación Swagger UI interactiva exclusiva para este flujo."""
+async def get_flow_docs(flow_id: str, request: Request) -> HTMLResponse:
+    """Proporciona documentación interactiva moderna con Scalar para este flujo."""
     flow = await repo.get_flow(flow_id)
     if not flow:
         raise HTTPException(
             status_code=404,
             detail=f"Flujo con ID '{flow_id}' no encontrado.",
         )
-    return get_swagger_ui_html(
-        openapi_url=f"/api/flows/{flow_id}/openapi.json",
-        title=f"{flow.name} - Documentación de Webhook",
+    return HTMLResponse(
+        get_scalar_ui_html(
+            openapi_url=f"/api/flows/{flow_id}/openapi.json",
+            title=f"{flow.name} - Referencia de Webhook (Scalar)",
+        )
     )
 
 
