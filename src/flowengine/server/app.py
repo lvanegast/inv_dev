@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 
@@ -24,6 +24,7 @@ from flowengine.core.telemetry import TraceContext, telemetry
 from flowengine.core.throttling import default_throttler
 from flowengine.nodes.actions_http import close_shared_http_client
 from flowengine.nodes.registry import list_available_nodes
+from flowengine.server.auth import check_request_authenticated, get_admin_api_key
 from flowengine.server.openapi import generate_flow_openapi, get_scalar_ui_html
 from flowengine.server.streaming import execution_broker, format_sse
 from flowengine.storage.repository import FlowRepository
@@ -56,6 +57,75 @@ app = FastAPI(
     redoc_url=None,
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def admin_auth_middleware(request: Request, call_next):
+    """Protege los endpoints administrativos y de gestión si FLOWENGINE_API_KEY está configurada."""
+    expected_key = get_admin_api_key()
+    if expected_key:
+        path = request.url.path
+        is_public = (
+            path == "/health"
+            or path.startswith("/webhook/")
+            or path.startswith("/api/auth/")
+            or path in ("/docs", "/swagger", "/openapi.json", "/metrics", "/", "/dashboard")
+            or path.endswith("/openapi.json")
+            or path.endswith("/docs")
+        )
+        if (
+            not is_public
+            and path.startswith("/api/")
+            and not check_request_authenticated(request)
+        ):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Acceso no autorizado: API Key administrativa inválida o ausente."},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+    return await call_next(request)
+
+
+@app.get("/api/auth/status")
+async def auth_status(request: Request) -> dict[str, Any]:
+    """Informa si el servidor tiene autenticación administrativa habilitada y el estado actual."""
+    expected = get_admin_api_key()
+    if not expected:
+        return {"secured": False, "authenticated": True}
+    return {
+        "secured": True,
+        "authenticated": check_request_authenticated(request),
+    }
+
+
+@app.post("/api/auth/login")
+async def admin_login(payload: dict[str, str], response: Response) -> dict[str, Any]:
+    """Inicia sesión administrativa en el Dashboard Web estableciendo cookie segura."""
+    expected = get_admin_api_key()
+    if not expected:
+        return {"status": "ok", "message": "Autenticación no requerida (modo desarrollo abierto)"}
+
+    key = payload.get("api_key", "").strip()
+    import hmac
+
+    if not key or not hmac.compare_digest(key, expected):
+        raise HTTPException(status_code=401, detail="API Key administrativa inválida.")
+
+    response.set_cookie(
+        key="flowengine_admin_key",
+        value=key,
+        httponly=True,
+        samesite="lax",
+    )
+    return {"status": "ok", "message": "Sesión administrativa iniciada exitosamente"}
+
+
+@app.post("/api/auth/logout")
+async def admin_logout(response: Response) -> dict[str, str]:
+    """Cierra la sesión administrativa en el Dashboard Web eliminando la cookie."""
+    response.delete_cookie(key="flowengine_admin_key")
+    return {"status": "ok", "message": "Sesión cerrada exitosamente"}
 
 
 @app.get("/docs", response_class=HTMLResponse, include_in_schema=False)

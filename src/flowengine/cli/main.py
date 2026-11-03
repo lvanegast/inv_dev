@@ -152,6 +152,9 @@ def serve(
     with_scheduler: bool = typer.Option(
         False, "--with-scheduler", help="Iniciar también el planificador en segundo plano (Cron/Interval)"
     ),
+    api_key: str | None = typer.Option(
+        None, "--api-key", "-k", help="Clave API maestra para proteger la API y el Dashboard"
+    ),
 ):
     """Inicia el servidor de Webhooks y API de FlowEngine."""
     import os
@@ -159,6 +162,12 @@ def serve(
     if with_scheduler:
         os.environ["FLOWENGINE_ENABLE_SCHEDULER"] = "true"
         console.print("[bold yellow]⏰ Scheduler en segundo plano habilitado.[/bold yellow]")
+
+    if api_key:
+        os.environ["FLOWENGINE_API_KEY"] = api_key
+        console.print("[bold cyan]🔒 Autenticación administrativa activa (FLOWENGINE_API_KEY).[/bold cyan]")
+    else:
+        console.print("[dim yellow]🔓 Servidor en modo desarrollo abierto (sin API Key).[/dim yellow]")
 
     console.print(
         f"[bold green]FlowEngine Server & Web Dashboard activo en http://{host}:{port}/dashboard[/bold green]"

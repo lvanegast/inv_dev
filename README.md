@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-146%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-155%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -460,9 +460,48 @@ alerts:
 
 ---
 
+## 🔁 Idempotencia y Deduplicación de Webhooks (`Idempotency-Key` & Hashing)
+
+FlowEngine previene la duplicación de transacciones y cobros ante reintentos de red automáticos de pasarelas de pago o proveedores SaaS:
+
+```yaml
+id: payment-processing-flow
+name: "Procesamiento de Pagos"
+idempotency:
+  enabled: true
+  header: "Idempotency-Key"     # Cabecera a inspeccionar (o X-Idempotency-Key)
+  ttl_seconds: 86400             # Retención de respuesta (24 horas)
+  by_payload_hash: false        # Genera hash SHA-256 si no se envía cabecera
+  enforce_header: false         # Exigir obligatoriamente la cabecera (400 si falta)
+```
+
+- **Replay Instantáneo (Cache HIT):** Si se recibe una petición con una clave idéntica ya completada, FlowEngine responde de inmediato con el payload original, código HTTP y cabeceras `Idempotent-Replay: true` y `X-Cache-Lookup: HIT` sin re-ejecutar el flujo.
+- **Protección contra Concurrencia:** Si dos peticiones idénticas llegan simultáneamente, la segunda recibe HTTP `409 Conflict` con cabecera `Retry-After: 2`.
+
+---
+
+## 🛡️ Seguridad del Servidor y API Keys (Modo Producción vs Desarrollo)
+
+El servidor puede operar en dos modos controlados mediante la variable `FLOWENGINE_API_KEY`:
+
+```powershell
+# Modo Producción protegido con clave API maestra
+uv run flow serve --api-key "mi-clave-secreta-de-administracion"
+# O vía variable de entorno:
+# $env:FLOWENGINE_API_KEY = "mi-clave-secreta-de-administracion"
+```
+
+- **Modo Abierto (Desarrollo):** Sin `FLOWENGINE_API_KEY`, la API y el Dashboard operan libres para iteración rápida local.
+- **Modo Protegido (Producción):**
+  - Todos los endpoints administrativos (`/api/flows`, `/api/connections`, `/api/runs`, `/api/dlq`, etc.) exigen `X-API-Key: <key>`, `Authorization: Bearer <key>` o cookie de sesión válida (`401 Unauthorized` si falta).
+  - **Dashboard Web:** Muestra un modal de desbloqueo elegante con indicador de estado (🔒 Protegido / 🔓 Abierto) y soporte de cierre de sesión.
+  - **Webhooks Públicos Aislados:** Los webhooks (`/webhook/{flow_id}`) permanecen independientes y accesibles con su propia autenticación HMAC/Bearer por flujo.
+
+---
+
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite completa de 146 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite completa de 155 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest
