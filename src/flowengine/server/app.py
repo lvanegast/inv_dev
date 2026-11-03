@@ -1,6 +1,7 @@
 """Servidor FastAPI de Ingestión de Webhooks y API de FlowEngine."""
 
 import asyncio
+import hashlib
 import json
 import os
 from collections.abc import AsyncGenerator
@@ -12,7 +13,7 @@ from typing import Any
 import yaml
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.openapi.docs import get_swagger_ui_html
-from fastapi.responses import HTMLResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 
 from flowengine.core.dag import DAGGraph, DAGValidationError
 from flowengine.core.models import ConnectionDefinition, FlowDefinition
@@ -156,6 +157,55 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
         "received_at": datetime.now(UTC).isoformat(),
     }
 
+    # Idempotencia y Deduplicación de Webhooks
+    idempotency_key = None
+    idemp_cfg = flow.idempotency
+
+    # Buscar cabecera especificada o estándar (Idempotency-Key / X-Idempotency-Key)
+    header_name = (idemp_cfg.header if idemp_cfg and idemp_cfg.header else "Idempotency-Key").lower()
+    raw_key = headers.get(header_name) or headers.get("x-idempotency-key") or headers.get("idempotency-key")
+
+    if not raw_key and idemp_cfg and idemp_cfg.enforce_header:
+        raise HTTPException(
+            status_code=400,
+            detail=f"La cabecera de idempotencia '{idemp_cfg.header}' es requerida para este flujo.",
+        )
+
+    if not raw_key and idemp_cfg and idemp_cfg.by_payload_hash and raw_body_bytes:
+        raw_key = hashlib.sha256(raw_body_bytes).hexdigest()
+
+    ttl_seconds = idemp_cfg.ttl_seconds if idemp_cfg else 86400
+
+    if raw_key:
+        idempotency_key = f"{flow_id}:{raw_key}"
+        existing_record = await repo.get_idempotency_record(idempotency_key)
+        if existing_record:
+            if existing_record["status"] == "completed":
+                return JSONResponse(
+                    content=existing_record["response_body"],
+                    status_code=existing_record["response_code"],
+                    headers={
+                        "Idempotent-Replay": "true",
+                        "X-Cache-Lookup": "HIT",
+                    },
+                )
+            if existing_record["status"] == "processing":
+                raise HTTPException(
+                    status_code=409,
+                    detail="Una petición idéntica se encuentra en procesamiento activo.",
+                    headers={"Retry-After": "2"},
+                )
+
+        reserved = await repo.create_idempotency_record(
+            key=idempotency_key, flow_id=flow_id, ttl_seconds=ttl_seconds
+        )
+        if not reserved:
+            raise HTTPException(
+                status_code=409,
+                detail="Una petición idéntica se encuentra en procesamiento activo.",
+                headers={"Retry-After": "2"},
+            )
+
     trace_ctx = TraceContext.from_traceparent(request.headers.get("traceparent"))
 
     async def on_event(evt: dict[str, Any]) -> None:
@@ -163,14 +213,19 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
         if run_id:
             await execution_broker.publish(run_id, evt)
 
-    async with default_throttler.acquire_concurrency(flow_id, flow.concurrency_limit):
-        runner = FlowRunner(flow, on_event=on_event, trace_context=trace_ctx)
-        run_result = await runner.run(trigger_payload=trigger_payload)
+    try:
+        async with default_throttler.acquire_concurrency(flow_id, flow.concurrency_limit):
+            runner = FlowRunner(flow, on_event=on_event, trace_context=trace_ctx)
+            run_result = await runner.run(trigger_payload=trigger_payload)
 
-    # Persistir ejecución
-    await repo.save_run(run_result)
+        # Persistir ejecución
+        await repo.save_run(run_result)
+    except Exception:
+        if idempotency_key:
+            await repo.delete_idempotency_record(idempotency_key)
+        raise
 
-    return {
+    response_payload = {
         "run_id": run_result.run_id,
         "flow_id": flow_id,
         "trace_id": trace_ctx.trace_id,
@@ -186,6 +241,20 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
             for k, v in run_result.step_results.items()
         },
     }
+
+    if idempotency_key:
+        await repo.complete_idempotency_record(
+            key=idempotency_key,
+            run_id=run_result.run_id,
+            response_code=200,
+            response_body=response_payload,
+        )
+
+    return JSONResponse(
+        content=response_payload,
+        status_code=200,
+        headers={"Idempotent-Replay": "false"},
+    )
 
 
 @app.get("/api/nodes")

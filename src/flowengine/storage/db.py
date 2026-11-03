@@ -60,6 +60,20 @@ CREATE INDEX IF NOT EXISTS idx_runs_flow_id ON runs(flow_id);
 CREATE INDEX IF NOT EXISTS idx_runs_status ON runs(status);
 CREATE INDEX IF NOT EXISTS idx_runs_started_at ON runs(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_runs_flow_started ON runs(flow_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS idempotency_records (
+    key TEXT PRIMARY KEY,
+    flow_id TEXT NOT NULL,
+    run_id TEXT,
+    status TEXT NOT NULL,
+    response_code INTEGER DEFAULT 200,
+    response_body_json TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_idempotency_flow_id ON idempotency_records(flow_id);
+CREATE INDEX IF NOT EXISTS idx_idempotency_expires_at ON idempotency_records(expires_at);
 """
 
 

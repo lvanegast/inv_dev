@@ -52,6 +52,22 @@ class AlertConfig(BaseModel):
     custom_headers: dict[str, str] = Field(default_factory=dict, description="Cabeceras HTTP personalizadas")
 
 
+class IdempotencyConfig(BaseModel):
+    """Configuración de deduplicación e idempotencia para webhooks entrantes."""
+
+    enabled: bool = Field(default=True, description="Activa el soporte de idempotencia")
+    header: str = Field(default="Idempotency-Key", description="Cabecera HTTP a inspeccionar")
+    ttl_seconds: int = Field(default=86400, ge=1, description="Tiempo de vida en segundos del registro")
+    enforce_header: bool = Field(
+        default=False,
+        description="Si es True, rechaza con 400 si la petición webhook no incluye la cabecera",
+    )
+    by_payload_hash: bool = Field(
+        default=False,
+        description="Genera la clave a partir del hash SHA-256 del cuerpo si no se envía cabecera",
+    )
+
+
 class ConnectionDefinition(BaseModel):
     """Definición de credenciales / conexión en el Connection Vault."""
 
@@ -117,6 +133,10 @@ class FlowDefinition(BaseModel):
     alerts: list[AlertConfig] = Field(
         default_factory=list,
         description="Canales de notificación y alerta disparados ante fallos del flujo",
+    )
+    idempotency: IdempotencyConfig | None = Field(
+        default=None,
+        description="Configuración de idempotencia y deduplicación de webhooks",
     )
 
     def get_node(self, node_id: str) -> NodeDefinition | None:

@@ -1,6 +1,7 @@
 """Repositorio de persistencia de Flujos y Ejecuciones."""
 
 import json
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from flowengine.core.models import ConnectionDefinition, ConnectionType, ExecutionRun, FlowDefinition
@@ -348,3 +349,102 @@ class FlowRepository:
             cursor = await db.execute("DELETE FROM connections WHERE id = ?", (connection_id,))
             await db.commit()
             return cursor.rowcount > 0
+
+    async def get_idempotency_record(self, key: str) -> dict[str, Any] | None:
+        """Recupera un registro de idempotencia válido si no ha expirado."""
+        now_iso = datetime.now(UTC).isoformat()
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute(
+                """
+                SELECT key, flow_id, run_id, status, response_code, response_body_json, created_at, expires_at
+                FROM idempotency_records
+                WHERE key = ? AND expires_at > ?
+                """,
+                (key, now_iso),
+            ) as cursor,
+        ):
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            body = {}
+            if row["response_body_json"]:
+                try:
+                    body = json.loads(row["response_body_json"])
+                except Exception:
+                    body = {}
+            return {
+                "key": row["key"],
+                "flow_id": row["flow_id"],
+                "run_id": row["run_id"],
+                "status": row["status"],
+                "response_code": row["response_code"],
+                "response_body": body,
+                "created_at": row["created_at"],
+                "expires_at": row["expires_at"],
+            }
+
+    async def create_idempotency_record(
+        self, key: str, flow_id: str, ttl_seconds: int = 86400
+    ) -> bool:
+        """Reserva una clave de idempotencia en estado 'processing'. Retorna True si se reservó."""
+        now = datetime.now(UTC)
+        expires_at = (now + timedelta(seconds=ttl_seconds)).isoformat()
+        now_iso = now.isoformat()
+        async with self.db_manager.get_connection() as db:
+            await db.execute(
+                "DELETE FROM idempotency_records WHERE key = ? AND expires_at <= ?",
+                (key, now_iso),
+            )
+            try:
+                await db.execute(
+                    """
+                    INSERT INTO idempotency_records (key, flow_id, status, expires_at)
+                    VALUES (?, ?, 'processing', ?)
+                    """,
+                    (key, flow_id, expires_at),
+                )
+                await db.commit()
+                return True
+            except Exception:
+                return False
+
+    async def complete_idempotency_record(
+        self,
+        key: str,
+        run_id: str,
+        response_code: int,
+        response_body: dict[str, Any],
+    ) -> None:
+        """Actualiza el registro con el resultado final de la ejecución para reenvío instantáneo."""
+        body_json = json.dumps(response_body)
+        async with self.db_manager.get_connection() as db:
+            await db.execute(
+                """
+                UPDATE idempotency_records
+                SET status = 'completed',
+                    run_id = ?,
+                    response_code = ?,
+                    response_body_json = ?
+                WHERE key = ?
+                """,
+                (run_id, response_code, body_json, key),
+            )
+            await db.commit()
+
+    async def delete_idempotency_record(self, key: str) -> None:
+        """Elimina una clave de idempotencia (ej. tras un fallo no recuperable)."""
+        async with self.db_manager.get_connection() as db:
+            await db.execute("DELETE FROM idempotency_records WHERE key = ?", (key,))
+            await db.commit()
+
+    async def cleanup_expired_idempotency_records(self) -> int:
+        """Limpia registros de idempotencia caducados."""
+        now_iso = datetime.now(UTC).isoformat()
+        async with self.db_manager.get_connection() as db:
+            cursor = await db.execute(
+                "DELETE FROM idempotency_records WHERE expires_at <= ?",
+                (now_iso,),
+            )
+            await db.commit()
+            return cursor.rowcount
