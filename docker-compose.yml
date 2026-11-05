@@ -1,0 +1,26 @@
+services:
+  flowengine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: flowengine
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - FLOWENGINE_DB_PATH=/data/flowengine.db
+      - FLOWENGINE_MASTER_KEY=${FLOWENGINE_MASTER_KEY:-flowengine-prod-master-key-change-me}
+      - FLOWENGINE_API_KEY=${FLOWENGINE_API_KEY:-}
+      - FLOWENGINE_MAX_BODY_BYTES=10485760
+    volumes:
+      - flowengine_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  flowengine_data:
+    driver: local
