@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-155%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-165%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -100,6 +100,9 @@ uv run flow nodes
 | `action_log` | Acción | Incorporado | Registro de eventos y alertas formateadas en consola. |
 | `action_iterator` | Lotes | Incorporado | Desempaqueta un array para ejecutar pasos posteriores por cada elemento (`{{item}}`). |
 | `action_aggregator` | Lotes | Incorporado | Agrupa y consolida los resultados del bucle (sumatorias, listas, conteos). |
+| `action_subflow` | Flujo | Incorporado | Sub-rutina modular anidada con inspección y prevención de ciclos en el grafo. |
+| `action_sql` | Base de Datos | Incorporado | Ejecución parametrizada y segura sobre SQLite / conexiones del Vault. |
+| `action_email` | Notificación | Incorporado | Envío de correos electrónicos transaccionales SMTP con texto, HTML y simulación. |
 | `* (plugins)` | Variable | Externo | Nodos desarrollados por terceros registrados dinámicamente. |
 
 ### Cómo Crear un Plugin Personalizado
@@ -499,9 +502,62 @@ uv run flow serve --api-key "mi-clave-secreta-de-administracion"
 
 ---
 
+## 🔌 Nodos Nativos de Integración: SQL & Email
+
+FlowEngine incluye nodos nativos listos para producción para consultar bases de datos y notificar a usuarios:
+
+### 1. `action_sql` (Consultas Parametrizadas Seguras)
+```yaml
+nodes:
+  - id: fetch_customer
+    name: "Buscar Cliente"
+    type: action_sql
+    config:
+      query: "SELECT id, name, email, balance FROM customers WHERE email = ?;"
+      params:
+        - "{{trigger.body.customer_email}}"
+      read_only: true  # Si es True, impide mutaciones (INSERT/UPDATE/DELETE)
+```
+
+### 2. `action_email` (Correos Transaccionales SMTP)
+```yaml
+nodes:
+  - id: send_invoice_email
+    name: "Enviar Factura por Correo"
+    type: action_email
+    config:
+      to: "{{fetch_customer.rows.0.email}}"
+      subject: "Tu Factura #{{trigger.body.invoice_id}}"
+      body_text: "Hola {{fetch_customer.rows.0.name}}, adjuntamos el detalle de tu pago."
+      body_html: "<h2>Factura Aprobada</h2><p>Monto: ${{trigger.body.total}}</p>"
+      connection_id: "sendgrid-smtp-conn"  # Resuelve credenciales del Connection Vault
+      mock: false                         # En true simula el envío sin conexión de red
+```
+
+---
+
+## 🐳 Despliegue con Docker y Docker Compose
+
+FlowEngine incluye una imagen multi-stage optimizada construida sobre `uv` y Debian slim:
+
+```powershell
+# Iniciar con Docker Compose en segundo plano
+docker compose up -d --build
+
+# Comprobar estado y healthcheck
+docker compose ps
+docker compose logs -f
+```
+
+- **Almacenamiento Persistente:** Volumen `flowengine_data` montado en `/data` conservando la base SQLite en modo WAL y sus versiones.
+- **Seguridad en Contenedor:** Ejecución como usuario sin privilegios `appuser` (UID 1000).
+- **Healthcheck Integrado:** Comprobación periódica con `curl http://localhost:8000/health`.
+
+---
+
 ## 🧪 Pruebas Automatizadas y Calidad
 
-Para ejecutar la suite completa de 155 pruebas automatizadas y validar el 100% de los componentes:
+Para ejecutar la suite completa de 165 pruebas automatizadas y validar el 100% de los componentes:
 
 ```powershell
 # Ejecutar tests con pytest
