@@ -1,5 +1,6 @@
 """Nodo de automatización de navegador Web (RPA) con Playwright."""
 
+import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -24,12 +25,19 @@ class BrowserAction(BaseNode):
             }
 
         url = cfg.get("url")
-        if not url:
-            raise ValueError(f"Nodo '{self.node_id}' requiere el parámetro 'url'.")
+        html_content = cfg.get("html")
+        if not url and not html_content:
+            raise ValueError(f"Nodo '{self.node_id}' requiere el parámetro 'url' o 'html'.")
+
+        # Codificar de forma segura data URLs con HTML para evitar truncamiento por caracteres '#'
+        if url and url.startswith("data:text/html") and "," in url:
+            header, raw_content = url.split(",", 1)
+            if "<" in raw_content or "#" in raw_content:
+                url = f"{header},{urllib.parse.quote(raw_content)}"
 
         actions = cfg.get("actions", [])
         headless = bool(cfg.get("headless", True))
-        timeout_ms = int(cfg.get("timeout_ms", 30000))
+        timeout_ms = int(cfg.get("timeout_ms", 10000))
         viewport = cfg.get("viewport", {"width": 1280, "height": 800})
 
         try:
@@ -54,9 +62,13 @@ class BrowserAction(BaseNode):
             )
             page.set_default_timeout(timeout_ms)
 
-            # 1. Navegar a la URL principal
-            await page.goto(url, wait_until=cfg.get("wait_until", "domcontentloaded"))
-            executed_steps.append(f"goto: {url}")
+            # 1. Cargar el documento o navegar a la URL principal
+            if html_content:
+                await page.set_content(html_content, wait_until="domcontentloaded")
+                executed_steps.append("set_content: inline html")
+            elif url:
+                await page.goto(url, wait_until=cfg.get("wait_until", "domcontentloaded"))
+                executed_steps.append(f"goto: {url[:100]}...")
 
             # 2. Ejecutar la secuencia de acciones RPA
             for step in actions:

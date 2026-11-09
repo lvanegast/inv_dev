@@ -31,6 +31,31 @@ async def test_browser_action_mock():
 
 
 @pytest.mark.asyncio
+async def test_browser_action_inline_html():
+    node = BrowserAction(
+        NodeDefinition(
+            id="rpa_inline",
+            type="action_browser",
+            config={
+                "html": (
+                    "<html><body><h1 id='portal'>Portal Interno</h1>"
+                    "<span id='status'>OK</span></body></html>"
+                ),
+                "headless": True,
+                "actions": [
+                    {"action": "wait_for_selector", "selector": "#portal"},
+                    {"action": "extract_text", "selector": "#status", "key": "estado"},
+                ],
+            },
+        )
+    )
+    res = await node.execute({})
+    assert res["status"] == "ok"
+    assert res["extracted"]["estado"] == "OK"
+    assert res["actions_executed"] == 3
+
+
+@pytest.mark.asyncio
 async def test_browser_action_validation_errors():
     # Sin URL
     node_no_url = BrowserAction(
@@ -40,7 +65,7 @@ async def test_browser_action_validation_errors():
             config={},
         )
     )
-    with pytest.raises(ValueError, match="requiere el parámetro 'url'"):
+    with pytest.raises(ValueError, match="requiere el parámetro 'url' o 'html'"):
         await node_no_url.execute({})
 
     # Acción no válida

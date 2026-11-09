@@ -39,6 +39,7 @@ ENV/
 *.sqlite
 *.sqlite3
 flowengine.db
+screenshots/
 
 # Secrets & Environment variables
 .env
