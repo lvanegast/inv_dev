@@ -679,9 +679,8 @@
         const randId = Math.floor(100 + Math.random() * 900);
         payloadTextarea.value = JSON.stringify({
           body: {
-            ticket_id: "TK-2026-" + randId,
-            departamento: "Operaciones Central",
-            operador: "Carlos Gómez"
+            username: "operador_" + randId,
+            departamento: "Mesa de Operaciones"
           }
         }, null, 2);
       } else if (example) {

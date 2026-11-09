@@ -1,75 +1,63 @@
 id: rpa-portal-scraping
-name: "RPA Operativo: Consulta de Trámites y Captura Web"
-description: "Automatización de interfaz gráfica con Chromium/Playwright: abre un portal web, completa campos operativos, extrae datos del trámite y toma una captura de pantalla de comprobante."
+name: "RPA Operativo: Login y Extracción en Portal Web Real"
+description: "Automatización real con Playwright: entra a un portal web en internet (quotes.toscrape.com/login), llena las credenciales del formulario, hace clic en Enviar, verifica el inicio de sesión y toma una captura de pantalla real del sitio."
 status: active
 
 trigger:
   id: rpa_trigger
-  name: "Disparador de Trámite Operativo"
+  name: "Disparador de Acceso Operativo"
   type: trigger_webhook
   config:
     example_payload:
-      ticket_id: "TK-2026-904"
-      departamento: "Operaciones Central"
-      operador: "Carlos Gómez"
+      username: "operador_central"
+      departamento: "Mesa de Operaciones"
 
 nodes:
-  # 1. Automatización Robótica de Navegador Web (RPA)
+  # 1. Automatización Robótica en Vivo con Playwright
   - id: execute_browser_automation
-    name: "RPA: Navegar y Extraer del Portal"
+    name: "RPA: Iniciar Sesión en Portal Real"
     type: action_browser
     config:
-      html: |
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Portal Operativo de Trámites</title>
-          <style>
-            body { font-family: sans-serif; padding: 30px; background: #f8fafc; color: #0f172a; }
-            .box { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-            h2 { color: #0284c7; margin-top: 0; }
-            .badge { background: #dcfce7; color: #166534; padding: 4px 10px; border-radius: 9999px; font-size: 13px; font-weight: bold; }
-            .code { font-family: monospace; background: #f1f5f9; padding: 3px 8px; border-radius: 4px; font-weight: bold; color: #7c3aed; }
-          </style>
-        </head>
-        <body>
-          <div class="box">
-            <h2>Sistema de Mesa de Ayuda y Operaciones</h2>
-            <p>Estado del Servidor: <span id="server_status" class="badge">En Línea (Normal)</span></p>
-            <p>Folio de Autorización: <span id="auth_code" class="code">AUTH-8829-X</span></p>
-            <p>Tiempo Estimado: <span id="eta">15 minutos</span></p>
-          </div>
-        </body>
-        </html>
+      url: "https://quotes.toscrape.com/login"
       headless: true
-      timeout_ms: 10000
+      timeout_ms: 15000
       actions:
         - action: "wait_for_selector"
-          selector: "#auth_code"
+          selector: "#username"
+        - action: "fill"
+          selector: "#username"
+          value: "{{trigger.body.username}}"
+        - action: "fill"
+          selector: "#password"
+          value: "ClaveOperador2026!"
+        - action: "click"
+          selector: "input[type='submit']"
+        - action: "wait_for_selector"
+          selector: "a[href='/logout']"
         - action: "extract_text"
-          selector: "#server_status"
-          key: "estado_sistema"
+          selector: ".quote .text"
+          key: "cita_destacada"
         - action: "extract_text"
-          selector: "#auth_code"
-          key: "codigo_autorizacion"
+          selector: ".quote .author"
+          key: "autor_cita"
         - action: "extract_text"
-          selector: "#eta"
-          key: "tiempo_estimado"
+          selector: "a[href='/logout']"
+          key: "estado_sesion"
         - action: "screenshot"
-          path: "screenshots/comprobante_tramite_{{trigger.body.ticket_id}}.png"
+          path: "screenshots/portal_real_{{trigger.body.username}}.png"
 
-  # 2. Transformar y formatear datos extraídos
+  # 2. Consolidar datos extraídos
   - id: format_rpa_summary
     name: "Transform: Consolidar Datos de RPA"
     type: action_transform
     config:
-      ticket: "{{trigger.body.ticket_id}}"
-      operador: "{{trigger.body.operador}}"
-      codigo: "{{execute_browser_automation.extracted.codigo_autorizacion}}"
-      estado: "{{execute_browser_automation.extracted.estado_sistema}}"
-      pantallazo: "{{execute_browser_automation.screenshot_path}}"
+      operador: "{{trigger.body.username}}"
+      autor: "{{execute_browser_automation.extracted.autor_cita}}"
+      cita: "{{execute_browser_automation.extracted.cita_destacada}}"
+      sesion: "{{execute_browser_automation.extracted.estado_sesion}}"
+      pantallazo: "{{execute_browser_automation.screenshot_url}}"
 
-  # 3. Guardar registro en la base de datos de auditoría operativa
+  # 3. Guardar registro en la base de datos de auditoría
   - id: init_rpa_db
     name: "SQL: Crear Tabla de Auditoría RPA"
     type: action_sql
@@ -82,10 +70,10 @@ nodes:
     config:
       query: "INSERT INTO rpa_records (ticket, operator, auth_code, status, screenshot) VALUES (?, ?, ?, ?, ?) ON CONFLICT(ticket) DO UPDATE SET operator=excluded.operator, auth_code=excluded.auth_code, status=excluded.status, screenshot=excluded.screenshot, created_at=CURRENT_TIMESTAMP;"
       params:
-        - "{{format_rpa_summary.ticket}}"
         - "{{format_rpa_summary.operador}}"
-        - "{{format_rpa_summary.codigo}}"
-        - "{{format_rpa_summary.estado}}"
+        - "{{format_rpa_summary.operador}}"
+        - "{{format_rpa_summary.autor}}"
+        - "{{format_rpa_summary.sesion}}"
         - "{{format_rpa_summary.pantallazo}}"
 
   # 4. Registrar en el log del sistema
@@ -94,7 +82,7 @@ nodes:
     type: action_log
     config:
       level: info
-      message: "RPA completado con éxito para ticket {{trigger.body.ticket_id}}. Código obtenido: {{execute_browser_automation.extracted.codigo_autorizacion}}. Captura guardada en: {{execute_browser_automation.screenshot_path}}"
+      message: "Sesión iniciada con éxito en portal real quotes.toscrape.com por {{trigger.body.username}}. Autor extraído: {{execute_browser_automation.extracted.autor_cita}}. Captura: {{execute_browser_automation.screenshot_url}}"
 
 edges:
   - source: rpa_trigger
