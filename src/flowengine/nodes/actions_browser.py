@@ -50,6 +50,7 @@ class BrowserAction(BaseNode):
 
         extracted: dict[str, Any] = {}
         screenshot_path: str | None = None
+        screenshot_url: str | None = None
         executed_steps: list[str] = []
 
         async with async_playwright() as p:
@@ -134,6 +135,7 @@ class BrowserAction(BaseNode):
                     full_page = bool(step.get("full_page", False))
                     await page.screenshot(path=path, full_page=full_page)
                     screenshot_path = str(Path(path).resolve())
+                    screenshot_url = f"/screenshots/{Path(path).name}"
                     executed_steps.append(f"screenshot: {path}")
 
                 elif action_type == "evaluate":
@@ -156,6 +158,7 @@ class BrowserAction(BaseNode):
             "title": final_title,
             "extracted": extracted,
             "screenshot_path": screenshot_path,
+            "screenshot_url": screenshot_url,
             "actions_executed": len(executed_steps),
             "steps": executed_steps,
         }

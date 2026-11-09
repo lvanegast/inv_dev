@@ -14,6 +14,7 @@ import yaml
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from flowengine.core.dag import DAGGraph, DAGValidationError
 from flowengine.core.models import ConnectionDefinition, FlowDefinition, FlowStatus
@@ -59,6 +60,11 @@ app = FastAPI(
 )
 
 
+SCREENSHOTS_DIR = Path("screenshots")
+SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/screenshots", StaticFiles(directory=str(SCREENSHOTS_DIR)), name="screenshots")
+
+
 @app.middleware("http")
 async def admin_auth_middleware(request: Request, call_next):
     """Protege los endpoints administrativos y de gestión si FLOWENGINE_API_KEY está configurada."""
@@ -68,8 +74,9 @@ async def admin_auth_middleware(request: Request, call_next):
         is_public = (
             path == "/health"
             or path.startswith("/webhook/")
+            or path.startswith("/screenshots/")
             or path.startswith("/api/auth/")
-            or path in ("/docs", "/swagger", "/openapi.json", "/metrics", "/", "/dashboard")
+            or path in ("/docs", "/swagger", "/openapi.json", "/metrics", "/", "/dashboard", "/screenshots")
             or path.endswith("/openapi.json")
             or path.endswith("/docs")
         )
