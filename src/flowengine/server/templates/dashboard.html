@@ -607,8 +607,8 @@
               : 'bg-slate-950/60 border-slate-800/80 hover:bg-slate-800/50 hover:border-slate-700'
           }">
             <div class="flex items-center justify-between">
-              <span class="font-medium text-xs text-white truncate max-w-[200px]">${escapeHtml(flow.name)}</span>
-              <span class="text-[10px] px-1.5 py-0.5 rounded font-mono ${
+              <span class="font-medium text-xs text-white truncate max-w-[190px]">${escapeHtml(flow.name)}</span>
+              <span class="text-[10px] px-1.5 py-0.5 rounded font-mono shrink-0 ml-1 ${
                 triggerType.includes('webhook') ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20' :
                 triggerType.includes('schedule') ? 'bg-purple-500/10 text-purple-400 border border-purple-500/20' :
                 'bg-slate-700/50 text-slate-300'
@@ -616,8 +616,9 @@
                 ${triggerType}
               </span>
             </div>
-            <div class="flex items-center justify-between mt-2 text-[11px] text-slate-400">
-              <span class="font-mono text-slate-500 text-[10px]">${flow.id}</span>
+            ${flow.description ? `<p class="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-tight">${escapeHtml(flow.description)}</p>` : ''}
+            <div class="flex items-center justify-between mt-2 text-[10px] text-slate-500">
+              <span class="font-mono">${flow.id}</span>
               <span>${flow.nodes ? flow.nodes.length : 0} nodos • ${flow.edges ? flow.edges.length : 0} aristas</span>
             </div>
           </div>
@@ -847,7 +848,7 @@
           } else if (data.status === 'failed') {
             card.classList.add('border-red-500', 'ring-2', 'ring-red-500/50', 'bg-red-950/20');
           } else if (data.status === 'skipped') {
-            card.classList.add('opacity-40');
+            card.classList.add('border-dashed', 'border-slate-700', 'bg-slate-900/30', 'opacity-60');
           }
         }
         if (timing) {
@@ -858,25 +859,35 @@
             timing.className = 'text-[10px] text-red-400 font-semibold mt-1';
             timing.textContent = `❌ Falló (${Number(data.duration_ms).toFixed(1)}ms)`;
           } else {
-            timing.className = 'text-[10px] text-slate-500 mt-1';
-            timing.textContent = 'Saltado';
+            timing.className = 'text-[10px] text-amber-400/80 font-medium mt-1';
+            timing.textContent = '⏭️ Omitido (Bifurcación no tomada)';
           }
         }
         if (badge && data.status === 'success') {
           badge.textContent = '✅';
         } else if (badge && data.status === 'failed') {
           badge.textContent = '❌';
+        } else if (badge && data.status === 'skipped') {
+          badge.textContent = '⏭️';
+          badge.title = 'Nodo no ejecutado porque la condición condicional (If/Else) no se cumplió';
         }
       } else if (eventType === 'run_finished') {
         const isSuccess = data.status === 'success';
-        statusAlert.className = `mt-3 text-xs p-2.5 rounded-lg border ${
+        statusAlert.className = `mt-3 text-xs p-3 rounded-lg border ${
           isSuccess 
-            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
             : 'bg-red-500/10 border-red-500/30 text-red-400'
         }`;
         statusAlert.innerHTML = `
-          <strong>${isSuccess ? '✅ Éxito' : '❌ Falló'}:</strong> Corrida completada en <strong>${data.duration_ms}ms</strong> con transmisión SSE.
-          <button onclick="inspectRun('${data.run_id}')" class="underline ml-2 text-white font-medium">Ver auditoría completa</button>
+          <div class="flex items-center justify-between">
+            <div>
+              <strong>${isSuccess ? '✅ Flujo completado con éxito' : '❌ Corrida con errores'}</strong> (${data.duration_ms}ms).
+              <span class="text-slate-400 block mt-0.5">${isSuccess ? 'Los nodos verdes se ejecutaron; los marcados con ⏭️ se omitieron correctamente por reglas condicionales.' : 'Ocurrió un error durante la ejecución.'}</span>
+            </div>
+            <button onclick="inspectRun('${data.run_id}')" class="px-2.5 py-1 bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/40 text-emerald-300 rounded text-xs font-medium transition shrink-0 ml-3">
+              🔍 Ver datos del flujo
+            </button>
+          </div>
         `;
       }
     }
