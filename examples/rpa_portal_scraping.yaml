@@ -1,0 +1,91 @@
+id: rpa-portal-scraping
+name: "RPA Operativo: Consulta de Trámites y Captura Web"
+description: "Automatización de interfaz gráfica con Chromium/Playwright: abre un portal web, completa campos operativos, extrae datos del trámite y toma una captura de pantalla de comprobante."
+status: active
+
+trigger:
+  id: rpa_trigger
+  name: "Disparador de Trámite Operativo"
+  type: trigger_webhook
+  config:
+    example_payload:
+      ticket_id: "TK-2026-904"
+      departamento: "Operaciones Central"
+      operador: "Carlos Gómez"
+
+nodes:
+  # 1. Automatización Robótica de Navegador Web (RPA)
+  - id: execute_browser_automation
+    name: "RPA: Navegar y Extraer del Portal"
+    type: action_browser
+    config:
+      url: "data:text/html;charset=utf-8,<html><head><title>Portal Operativo de Trámites</title><style>body{font-family:sans-serif;padding:30px;background:#f8fafc;}h2{color:#0f172a;}.box{background:white;padding:20px;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,0.1);}</style></head><body><div class='box'><h2>Sistema de Mesa de Ayuda y Operaciones</h2><p>Estado del Servidor: <strong id='server_status'>En Línea (Normal)</strong></p><p>Folio de Autorización: <span id='auth_code'>AUTH-8829-X</span></p><p>Tiempo Estimado: <span id='eta'>15 minutos</span></p></div></body></html>"
+      headless: true
+      actions:
+        - action: "wait_for_selector"
+          selector: "#auth_code"
+        - action: "extract_text"
+          selector: "#server_status"
+          key: "estado_sistema"
+        - action: "extract_text"
+          selector: "#auth_code"
+          key: "codigo_autorizacion"
+        - action: "extract_text"
+          selector: "#eta"
+          key: "tiempo_estimado"
+        - action: "screenshot"
+          path: "screenshots/comprobante_tramite_{{trigger.body.ticket_id}}.png"
+
+  # 2. Transformar y formatear datos extraídos
+  - id: format_rpa_summary
+    name: "Transform: Consolidar Datos de RPA"
+    type: action_transform
+    config:
+      ticket: "{{trigger.body.ticket_id}}"
+      operador: "{{trigger.body.operador}}"
+      codigo: "{{execute_browser_automation.extracted.codigo_autorizacion}}"
+      estado: "{{execute_browser_automation.extracted.estado_sistema}}"
+      pantallazo: "{{execute_browser_automation.screenshot_path}}"
+
+  # 3. Guardar registro en la base de datos de auditoría operativa
+  - id: init_rpa_db
+    name: "SQL: Crear Tabla de Auditoría RPA"
+    type: action_sql
+    config:
+      query: "CREATE TABLE IF NOT EXISTS rpa_records (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket TEXT UNIQUE, operator TEXT, auth_code TEXT, status TEXT, screenshot TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"
+
+  - id: save_rpa_record
+    name: "SQL: Guardar Trámite RPA"
+    type: action_sql
+    config:
+      query: "INSERT INTO rpa_records (ticket, operator, auth_code, status, screenshot) VALUES (?, ?, ?, ?, ?) ON CONFLICT(ticket) DO UPDATE SET operator=excluded.operator, auth_code=excluded.auth_code, status=excluded.status, screenshot=excluded.screenshot, created_at=CURRENT_TIMESTAMP;"
+      params:
+        - "{{format_rpa_summary.ticket}}"
+        - "{{format_rpa_summary.operador}}"
+        - "{{format_rpa_summary.codigo}}"
+        - "{{format_rpa_summary.estado}}"
+        - "{{format_rpa_summary.pantallazo}}"
+
+  # 4. Registrar en el log del sistema
+  - id: log_rpa_completion
+    name: "Log: Auditoría Final RPA"
+    type: action_log
+    config:
+      level: info
+      message: "RPA completado con éxito para ticket {{trigger.body.ticket_id}}. Código obtenido: {{execute_browser_automation.extracted.codigo_autorizacion}}. Captura guardada en: {{execute_browser_automation.screenshot_path}}"
+
+edges:
+  - source: rpa_trigger
+    target: execute_browser_automation
+
+  - source: execute_browser_automation
+    target: format_rpa_summary
+
+  - source: format_rpa_summary
+    target: init_rpa_db
+
+  - source: init_rpa_db
+    target: save_rpa_record
+
+  - source: save_rpa_record
+    target: log_rpa_completion

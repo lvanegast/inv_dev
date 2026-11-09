@@ -2,7 +2,6 @@
 
 from typing import Any
 
-from flowengine.core.expressions import get_nested_value
 from flowengine.nodes.base import BaseNode
 
 
@@ -28,6 +27,8 @@ class AggregatorNode(BaseNode):
     """Recolecta y consolida los resultados de múltiples ejecuciones de un Iterator."""
 
     async def execute(self, context: dict[str, Any]) -> Any:
+        from flowengine.core.expressions import get_nested_value
+
         cfg = self.resolve_config(context)
         source_node_id = cfg.get("source_node")
         target_field = cfg.get("target_field")

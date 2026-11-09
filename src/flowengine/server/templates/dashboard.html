@@ -660,6 +660,15 @@
             invoice_ref: randRef
           }
         }, null, 2);
+      } else if (flow.id === 'rpa-portal-scraping') {
+        const randId = Math.floor(100 + Math.random() * 900);
+        payloadTextarea.value = JSON.stringify({
+          body: {
+            ticket_id: "TK-2026-" + randId,
+            departamento: "Operaciones Central",
+            operador: "Carlos Gómez"
+          }
+        }, null, 2);
       } else if (example) {
         payloadTextarea.value = JSON.stringify(example.body ? example : { body: example }, null, 2);
       } else if (flow.id === 'crm-lead-pipeline') {
@@ -779,10 +788,16 @@
       if (type.includes('filter')) return { badge: 'text-yellow-400 bg-yellow-500/10' };
       if (type.includes('log')) return { badge: 'text-teal-400 bg-teal-500/10' };
       if (type.includes('iterator') || type.includes('aggregator')) return { badge: 'text-pink-400 bg-pink-500/10' };
+      if (type.includes('browser')) return { badge: 'text-orange-400 bg-orange-500/10' };
+      if (type.includes('sql')) return { badge: 'text-emerald-400 bg-emerald-500/10' };
+      if (type.includes('email')) return { badge: 'text-violet-400 bg-violet-500/10' };
       return { badge: 'text-slate-400 bg-slate-500/10' };
     }
 
     function getNodeIcon(type) {
+      if (type.includes('browser')) return '🖥️';
+      if (type.includes('sql')) return '🗄️';
+      if (type.includes('email')) return '✉️';
       if (type.includes('transform')) return '🔄';
       if (type.includes('code')) return '💻';
       if (type.includes('http')) return '🌐';

@@ -6,6 +6,7 @@ from typing import Any
 
 from flowengine.core.models import NodeDefinition
 from flowengine.nodes.actions_batch import AggregatorNode, IteratorNode
+from flowengine.nodes.actions_browser import BrowserAction
 from flowengine.nodes.actions_email import EmailAction
 from flowengine.nodes.actions_filter import FilterAction
 from flowengine.nodes.actions_http import HttpRequestAction
@@ -32,6 +33,7 @@ BUILTIN_NODES: dict[str, type[BaseNode]] = {
     "action_subflow": SubflowAction,
     "action_sql": SqlAction,
     "action_email": EmailAction,
+    "action_browser": BrowserAction,
 }
 
 NODE_REGISTRY: dict[str, type[BaseNode]] = dict(BUILTIN_NODES)

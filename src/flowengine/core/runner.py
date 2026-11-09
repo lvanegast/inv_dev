@@ -16,7 +16,6 @@ from flowengine.core.models import (
 )
 from flowengine.core.security import mask_sensitive_data
 from flowengine.core.telemetry import Span, TraceContext, telemetry
-from flowengine.nodes.registry import create_node_instance
 
 logger = logging.getLogger("flowengine.runner")
 
@@ -203,6 +202,8 @@ class FlowRunner:
             for loop_nid in loop_nodes:
                 should_run, _ = self.dag.should_execute_node(loop_nid, iter_ctx)
                 if should_run:
+                    from flowengine.nodes.registry import create_node_instance
+
                     loop_node_def = self.dag.nodes_by_id[loop_nid]
                     node_inst = create_node_instance(loop_node_def)
                     out = await node_inst.execute(iter_ctx)
@@ -328,6 +329,8 @@ class FlowRunner:
         retries_left = node_def.retry_count
         delay = node_def.retry_delay_seconds
         last_error: Exception | None = None
+
+        from flowengine.nodes.registry import create_node_instance
 
         node_instance = create_node_instance(node_def)
 
