@@ -630,8 +630,77 @@
       if (!currentFlow) return;
 
       document.getElementById('selected-flow-badge').textContent = currentFlow.id;
+
+      // Ocultar alertas de ejecuciones de flujos anteriores
+      const statusAlert = document.getElementById('run-status-alert');
+      if (statusAlert) statusAlert.classList.add('hidden');
+
+      // Actualizar dinámicamente el payload JSON en el Test Runner
+      updateTestPayloadForFlow(currentFlow);
+
       renderFlowsList();
       renderDAG(currentFlow);
+    }
+
+    function updateTestPayloadForFlow(flow) {
+      const payloadTextarea = document.getElementById('test-payload');
+      if (!payloadTextarea) return;
+
+      const triggerCfg = (flow.trigger && flow.trigger.config) || {};
+      const example = triggerCfg.example_payload || triggerCfg.example || flow.example_payload;
+
+      if (example) {
+        payloadTextarea.value = JSON.stringify(example.body ? example : { body: example }, null, 2);
+      } else if (flow.id === 'invoice-sql-and-email') {
+        payloadTextarea.value = JSON.stringify({
+          body: {
+            customer_email: "ana.valencia@empresa.com",
+            customer_name: "Ana Valencia",
+            amount: 250.0,
+            invoice_ref: "FAC-2026-901"
+          }
+        }, null, 2);
+      } else if (flow.id === 'crm-lead-pipeline') {
+        payloadTextarea.value = JSON.stringify({
+          body: {
+            full_name: "María Elena Torres",
+            email: "maria.torres@acme.corp",
+            company: "Acme Industrial S.A.",
+            budget: 15000.0
+          }
+        }, null, 2);
+      } else if (flow.id === 'order-processing-zap') {
+        payloadTextarea.value = JSON.stringify({
+          body: {
+            status: "confirmed",
+            total: 120.0,
+            items: 3,
+            customer: { first_name: "Leonardo", last_name: "Vanegas", email: "leo@example.com" }
+          }
+        }, null, 2);
+      } else if (flow.id === 'batch-order-flow') {
+        payloadTextarea.value = JSON.stringify({
+          body: {
+            order_id: "ORD-BATCH-99",
+            items: [
+              { sku: "MOUSE-01", price: 25.0, qty: 2 },
+              { sku: "KEYBOARD-02", price: 80.0, qty: 1 },
+              { sku: "USB-HUB-03", price: 15.5, qty: 3 }
+            ]
+          }
+        }, null, 2);
+      } else if (flow.id === 'functions-and-env-demo') {
+        payloadTextarea.value = JSON.stringify({
+          body: {
+            raw_name: "   carlos alberto gómez   ",
+            email: "CARLOS.GOMEZ@GMAIL.COM ",
+            joined_date: "2026-10-21",
+            amount: 450.0
+          }
+        }, null, 2);
+      } else {
+        payloadTextarea.value = JSON.stringify({ body: {} }, null, 2);
+      }
     }
 
     function renderDAG(flow) {
