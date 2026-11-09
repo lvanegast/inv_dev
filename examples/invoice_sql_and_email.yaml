@@ -38,12 +38,12 @@ nodes:
             "currency": "USD"
         }
 
-  # 3. Guardar la factura en SQLite
+  # 3. Guardar la factura en SQLite (con soporte idempotente de actualización en conflicto)
   - id: insert_invoice_record
-    name: "SQL: Insertar Factura"
+    name: "SQL: Insertar o Actualizar Factura"
     type: action_sql
     config:
-      query: "INSERT INTO invoices (ref, email, subtotal, tax, total) VALUES (?, ?, ?, ?, ?);"
+      query: "INSERT INTO invoices (ref, email, subtotal, tax, total) VALUES (?, ?, ?, ?, ?) ON CONFLICT(ref) DO UPDATE SET email=excluded.email, subtotal=excluded.subtotal, tax=excluded.tax, total=excluded.total, created_at=CURRENT_TIMESTAMP;"
       params:
         - "{{payment_webhook.body.invoice_ref}}"
         - "{{payment_webhook.body.customer_email}}"
@@ -59,7 +59,7 @@ nodes:
       to: "{{payment_webhook.body.customer_email}}"
       subject: "Factura Aprobada {{payment_webhook.body.invoice_ref}} - FlowEngine"
       body_text: "Estimado/a {{payment_webhook.body.customer_name}}, su pago por ${{compute_tax_breakdown.total}} USD ha sido procesado exitosamente."
-      body_html: "<h2>Factura Aprobada</h2><p>Estimado/a <strong>{{payment_webhook.body.customer_name}}</strong>,</p><p>Subtotal: ${{compute_tax_breakdown.subtotal}}<br>IVA (19%): ${{compute_tax_breakdown.tax}}<br><strong>Total Pagado: ${{compute_tax_breakdown.total}} USD</strong></p><p>ID Factura: #{{insert_invoice_record.last_row_id}}</p>"
+      body_html: "<h2>Factura Aprobada</h2><p>Estimado/a <strong>{{payment_webhook.body.customer_name}}</strong>,</p><p>Subtotal: ${{compute_tax_breakdown.subtotal}}<br>IVA (19%): ${{compute_tax_breakdown.tax}}<br><strong>Total Pagado: ${{compute_tax_breakdown.total}} USD</strong></p><p>Referencia de Factura: {{payment_webhook.body.invoice_ref}}</p>"
       mock: true
 
   # 5. Registrar auditoría final
@@ -68,7 +68,7 @@ nodes:
     type: action_log
     config:
       level: info
-      message: "Factura {{payment_webhook.body.invoice_ref}} generada con éxito (ID DB #{{insert_invoice_record.last_row_id}}) y notificada a {{payment_webhook.body.customer_email}}."
+      message: "Factura {{payment_webhook.body.invoice_ref}} procesada con éxito y notificada a {{payment_webhook.body.customer_email}} (Total: ${{compute_tax_breakdown.total}})."
 
 edges:
   - source: payment_webhook

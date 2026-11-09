@@ -650,17 +650,18 @@
       const triggerCfg = (flow.trigger && flow.trigger.config) || {};
       const example = triggerCfg.example_payload || triggerCfg.example || flow.example_payload;
 
-      if (example) {
-        payloadTextarea.value = JSON.stringify(example.body ? example : { body: example }, null, 2);
-      } else if (flow.id === 'invoice-sql-and-email') {
+      if (flow.id === 'invoice-sql-and-email') {
+        const randRef = 'FAC-2026-' + Math.floor(100 + Math.random() * 900);
         payloadTextarea.value = JSON.stringify({
           body: {
             customer_email: "ana.valencia@empresa.com",
             customer_name: "Ana Valencia",
             amount: 250.0,
-            invoice_ref: "FAC-2026-901"
+            invoice_ref: randRef
           }
         }, null, 2);
+      } else if (example) {
+        payloadTextarea.value = JSON.stringify(example.body ? example : { body: example }, null, 2);
       } else if (flow.id === 'crm-lead-pipeline') {
         payloadTextarea.value = JSON.stringify({
           body: {

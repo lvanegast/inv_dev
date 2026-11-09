@@ -46,15 +46,25 @@ class AggregatorNode(BaseNode):
 
         if operation == "sum":
             numeric_vals = [v for v in collected if isinstance(v, (int, float))]
-            res = sum(numeric_vals)
+            raw_sum = sum(numeric_vals)
+            # Evitar artefactos de precisión IEEE-754 (ej. 210.04000000000002 -> 210.04)
+            res = round(raw_sum, 4) if isinstance(raw_sum, float) else raw_sum
         elif operation == "count":
             res = len(collected)
         elif operation == "min":
             numeric_vals = [v for v in collected if isinstance(v, (int, float))]
-            res = min(numeric_vals) if numeric_vals else 0
+            if numeric_vals:
+                min_v = min(numeric_vals)
+                res = round(min_v, 4) if isinstance(min_v, float) else min_v
+            else:
+                res = 0
         elif operation == "max":
             numeric_vals = [v for v in collected if isinstance(v, (int, float))]
-            res = max(numeric_vals) if numeric_vals else 0
+            if numeric_vals:
+                max_v = max(numeric_vals)
+                res = round(max_v, 4) if isinstance(max_v, float) else max_v
+            else:
+                res = 0
         else:
             res = collected
 
