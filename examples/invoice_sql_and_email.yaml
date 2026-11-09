@@ -1,0 +1,87 @@
+id: invoice-sql-and-email
+name: "Generador de Facturas con SQL y Notificación por Email"
+description: "Recibe un pago confirmado, consulta el saldo del cliente en base de datos, calcula impuestos (IVA 19%), guarda la factura en SQLite y despacha el recibo por correo electrónico."
+status: active
+trigger:
+  id: payment_webhook
+  name: "Webhook de Pago Aprobado"
+  type: trigger_webhook
+  config:
+    example_payload:
+      customer_email: "ana.valencia@empresa.com"
+      customer_name: "Ana Valencia"
+      amount: 250.0
+      invoice_ref: "FAC-2026-901"
+
+nodes:
+  # 1. Consultar o inicializar registro del cliente en la base de datos local
+  - id: init_db_schema
+    name: "SQL: Asegurar Tablas"
+    type: action_sql
+    config:
+      query: "CREATE TABLE IF NOT EXISTS invoices (id INTEGER PRIMARY KEY AUTOINCREMENT, ref TEXT UNIQUE, email TEXT, subtotal REAL, tax REAL, total REAL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"
+
+  # 2. Calcular desglose de impuestos (IVA 19%) y total
+  - id: compute_tax_breakdown
+    name: "Código: Cálculo de Impuestos y Total"
+    type: action_code
+    config:
+      code: |
+        subtotal = float(input.get("payment_webhook", {}).get("body", {}).get("amount", 0.0))
+        tax_rate = 0.19
+        tax_amount = round(subtotal * tax_rate, 2)
+        grand_total = round(subtotal + tax_amount, 2)
+        output = {
+            "subtotal": subtotal,
+            "tax": tax_amount,
+            "total": grand_total,
+            "currency": "USD"
+        }
+
+  # 3. Guardar la factura en SQLite
+  - id: insert_invoice_record
+    name: "SQL: Insertar Factura"
+    type: action_sql
+    config:
+      query: "INSERT INTO invoices (ref, email, subtotal, tax, total) VALUES (?, ?, ?, ?, ?);"
+      params:
+        - "{{payment_webhook.body.invoice_ref}}"
+        - "{{payment_webhook.body.customer_email}}"
+        - "{{compute_tax_breakdown.subtotal}}"
+        - "{{compute_tax_breakdown.tax}}"
+        - "{{compute_tax_breakdown.total}}"
+
+  # 4. Enviar notificación por correo con plantilla HTML
+  - id: send_invoice_email
+    name: "Email: Despachar Recibo de Factura"
+    type: action_email
+    config:
+      to: "{{payment_webhook.body.customer_email}}"
+      subject: "Factura Aprobada {{payment_webhook.body.invoice_ref}} - FlowEngine"
+      body_text: "Estimado/a {{payment_webhook.body.customer_name}}, su pago por ${{compute_tax_breakdown.total}} USD ha sido procesado exitosamente."
+      body_html: "<h2>Factura Aprobada</h2><p>Estimado/a <strong>{{payment_webhook.body.customer_name}}</strong>,</p><p>Subtotal: ${{compute_tax_breakdown.subtotal}}<br>IVA (19%): ${{compute_tax_breakdown.tax}}<br><strong>Total Pagado: ${{compute_tax_breakdown.total}} USD</strong></p><p>ID Factura: #{{insert_invoice_record.last_row_id}}</p>"
+      mock: true
+
+  # 5. Registrar auditoría final
+  - id: log_completion
+    name: "Log: Auditoría de Facturación"
+    type: action_log
+    config:
+      level: info
+      message: "Factura {{payment_webhook.body.invoice_ref}} generada con éxito (ID DB #{{insert_invoice_record.last_row_id}}) y notificada a {{payment_webhook.body.customer_email}}."
+
+edges:
+  - source: payment_webhook
+    target: init_db_schema
+
+  - source: init_db_schema
+    target: compute_tax_breakdown
+
+  - source: compute_tax_breakdown
+    target: insert_invoice_record
+
+  - source: insert_invoice_record
+    target: send_invoice_email
+
+  - source: send_invoice_email
+    target: log_completion

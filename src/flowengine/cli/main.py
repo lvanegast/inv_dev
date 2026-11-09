@@ -145,6 +145,42 @@ def history(
 
 
 @app.command()
+def pause(flow_id: str = typer.Argument(..., help="ID del flujo a pausar")):
+    """Pausa un flujo registrado para detener su ejecución programada y webhooks."""
+    from flowengine.core.models import FlowStatus
+
+    repo = FlowRepository()
+
+    async def _pause():
+        await repo.initialize()
+        return await repo.update_flow_status(flow_id, FlowStatus.PAUSED)
+
+    try:
+        flow = asyncio.run(_pause())
+        console.print(f"[bold yellow]⏸️ Flujo '{flow.name}' ({flow.id}) ha sido PAUSADO.[/bold yellow]")
+    except Exception as exc:
+        console.print(f"[bold red]Error al pausar flujo:[/bold red] {exc}")
+
+
+@app.command()
+def resume(flow_id: str = typer.Argument(..., help="ID del flujo a activar")):
+    """Reactiva un flujo pausado para reanudar sus ejecuciones programadas y webhooks."""
+    from flowengine.core.models import FlowStatus
+
+    repo = FlowRepository()
+
+    async def _resume():
+        await repo.initialize()
+        return await repo.update_flow_status(flow_id, FlowStatus.ACTIVE)
+
+    try:
+        flow = asyncio.run(_resume())
+        console.print(f"[bold green]▶️ Flujo '{flow.name}' ({flow.id}) ha sido ACTIVADO.[/bold green]")
+    except Exception as exc:
+        console.print(f"[bold red]Error al activar flujo:[/bold red] {exc}")
+
+
+@app.command()
 def serve(
     host: str = typer.Option("127.0.0.1", "--host", "-h", help="Host del servidor"),
     port: int = typer.Option(8000, "--port", "-p", help="Puerto HTTP"),

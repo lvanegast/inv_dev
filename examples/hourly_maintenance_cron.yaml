@@ -1,0 +1,61 @@
+id: hourly-maintenance-cron
+name: "Auditoría y Mantenimiento Programado del Motor (Cron Horario)"
+description: "Ejecución desatendida cada hora para auditar ejecuciones retenidas en la Dead Letter Queue (DLQ), limpiar registros de idempotencia caducados y alertar si hay anomalías."
+status: active
+trigger:
+  id: hourly_cron
+  name: "Temporizador Cron (Cada Hora)"
+  type: trigger_schedule
+  config:
+    cron: "0 * * * *"  # Al inicio de cada hora
+
+nodes:
+  # 1. Contar ejecuciones fallidas en las últimas 24 horas
+  - id: count_recent_failures
+    name: "SQL: Auditar Fallos Recientes"
+    type: action_sql
+    config:
+      query: "SELECT count(*) as failed_runs FROM runs WHERE status = 'failed' AND started_at > datetime('now', '-1 day');"
+
+  # 2. Limpiar registros de idempotencia que hayan expirado
+  - id: purge_expired_idempotency
+    name: "SQL: Purgar Idempotencia Expirada"
+    type: action_sql
+    config:
+      query: "DELETE FROM idempotency_records WHERE expires_at <= CURRENT_TIMESTAMP;"
+
+  # 3. Diagnóstico de salud
+  - id: compute_health_status
+    name: "Código: Evaluación de Umbral de Salud"
+    type: action_code
+    config:
+      code: |
+        failures = int(input.get("count_recent_failures", {}).get("rows", [{}])[0].get("failed_runs", 0))
+        purged = int(input.get("purge_expired_idempotency", {}).get("row_count", 0))
+        output = {
+            "failed_count_24h": failures,
+            "purged_idempotency_keys": purged,
+            "health_level": "WARNING" if failures > 10 else "HEALTHY",
+            "audit_timestamp": input.get("hourly_cron", {}).get("triggered_at", "N/A")
+        }
+
+  # 4. Registrar informe
+  - id: log_system_health
+    name: "Log: Reporte de Mantenimiento"
+    type: action_log
+    config:
+      level: info
+      message: "[MANTENIMIENTO] Estado: {{compute_health_status.health_level}} | Fallos en 24h: {{compute_health_status.failed_count_24h}} | Claves de idempotencia purgadas: {{compute_health_status.purged_idempotency_keys}}"
+
+edges:
+  - source: hourly_cron
+    target: count_recent_failures
+
+  - source: count_recent_failures
+    target: purge_expired_idempotency
+
+  - source: purge_expired_idempotency
+    target: compute_health_status
+
+  - source: compute_health_status
+    target: log_system_health

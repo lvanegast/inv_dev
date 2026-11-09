@@ -1,0 +1,96 @@
+id: crm-lead-pipeline
+name: "Ingesta y Calificación de Leads CRM con Idempotencia"
+description: "Recibe prospectos comerciales, deduplica solicitudes con Idempotency-Key y hash SHA-256, limpia los datos, filtra registros de prueba y almacena el lead en base de datos."
+status: active
+idempotency:
+  enabled: true
+  header: "Idempotency-Key"
+  ttl_seconds: 86400
+  by_payload_hash: true
+
+trigger:
+  id: lead_webhook
+  name: "Webhook de Captura de Prospectos"
+  type: trigger_webhook
+  config:
+    example_payload:
+      full_name: "   maría elena torres   "
+      email: "MARIA.TORRES@ACME.CORP "
+      company: "Acme Industrial S.A."
+      budget: 15000.0
+
+nodes:
+  # 1. Normalizar y limpiar datos con biblioteca de funciones de texto
+  - id: clean_lead_data
+    name: "Transformador: Normalizar Datos del Lead"
+    type: action_transform
+    config:
+      output:
+        normalized_name: "{{title(trim(lead_webhook.body.full_name))}}"
+        clean_email: "{{lower(trim(lead_webhook.body.email))}}"
+        company: "{{trim(lead_webhook.body.company)}}"
+        budget: "{{lead_webhook.body.budget}}"
+        received_at: "{{now()}}"
+
+  # 2. Filtro anti-spam: rechazar correos de prueba
+  - id: filter_valid_leads
+    name: "Filtro: Excluir Dominios de Prueba"
+    type: action_filter
+    config:
+      condition: "{{clean_lead_data.clean_email}} != 'test@example.com'"
+
+  # 3. Asegurar tabla de leads
+  - id: init_leads_table
+    name: "SQL: Crear Tabla Leads"
+    type: action_sql
+    config:
+      query: "CREATE TABLE IF NOT EXISTS leads (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, email TEXT UNIQUE, company TEXT, budget REAL, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"
+
+  # 4. Insertar o actualizar el lead
+  - id: upsert_lead_db
+    name: "SQL: Upsert de Prospecto"
+    type: action_sql
+    config:
+      query: "INSERT INTO leads (name, email, company, budget) VALUES (?, ?, ?, ?) ON CONFLICT(email) DO UPDATE SET budget=excluded.budget;"
+      params:
+        - "{{clean_lead_data.normalized_name}}"
+        - "{{clean_lead_data.clean_email}}"
+        - "{{clean_lead_data.company}}"
+        - "{{clean_lead_data.budget}}"
+
+  # 5. Enviar correo de bienvenida al prospecto
+  - id: send_welcome_email
+    name: "Email: Bienvenida al Lead"
+    type: action_email
+    config:
+      to: "{{clean_lead_data.clean_email}}"
+      subject: "¡Hola {{clean_lead_data.normalized_name}}, gracias por contactar a FlowEngine!"
+      body_text: "Hemos recibido el interés de {{clean_lead_data.company}} con presupuesto de ${{clean_lead_data.budget}}. Un asesor te contactará pronto."
+      mock: true
+
+  # 6. Registrar en consola
+  - id: log_lead_processed
+    name: "Log: Confirmación Lead"
+    type: action_log
+    config:
+      level: info
+      message: "Lead '{{clean_lead_data.normalized_name}}' ({{clean_lead_data.clean_email}}) registrado con éxito."
+
+edges:
+  - source: lead_webhook
+    target: clean_lead_data
+
+  - source: clean_lead_data
+    target: filter_valid_leads
+
+  - source: filter_valid_leads
+    target: init_leads_table
+
+  - source: init_leads_table
+    target: upsert_lead_db
+
+  - source: upsert_lead_db
+    target: send_welcome_email
+
+  - source: send_welcome_email
+    target: log_lead_processed

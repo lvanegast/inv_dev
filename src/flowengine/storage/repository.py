@@ -4,7 +4,13 @@ import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from flowengine.core.models import ConnectionDefinition, ConnectionType, ExecutionRun, FlowDefinition
+from flowengine.core.models import (
+    ConnectionDefinition,
+    ConnectionType,
+    ExecutionRun,
+    FlowDefinition,
+    FlowStatus,
+)
 from flowengine.core.vault import decrypt_data, encrypt_data
 from flowengine.storage.db import DatabaseManager
 
@@ -109,6 +115,15 @@ class FlowRepository:
 
         await self.save_flow(target_flow, changelog=f"Rollback a versión v{target_version}")
         return target_flow
+
+    async def update_flow_status(self, flow_id: str, status: FlowStatus) -> FlowDefinition:
+        """Actualiza el estado operativo de un flujo (active, paused, draft)."""
+        flow = await self.get_flow(flow_id)
+        if not flow:
+            raise ValueError(f"Flujo con ID '{flow_id}' no encontrado.")
+        flow.status = status
+        await self.save_flow(flow, changelog=f"Estado actualizado a {status.value}")
+        return flow
 
     async def get_flow(self, flow_id: str) -> FlowDefinition | None:
         """Recupera un flujo por su ID."""

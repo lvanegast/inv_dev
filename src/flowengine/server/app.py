@@ -16,7 +16,7 @@ from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, StreamingResponse
 
 from flowengine.core.dag import DAGGraph, DAGValidationError
-from flowengine.core.models import ConnectionDefinition, FlowDefinition
+from flowengine.core.models import ConnectionDefinition, FlowDefinition, FlowStatus
 from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.core.scheduler import SchedulerService
 from flowengine.core.security import verify_webhook_auth
@@ -169,6 +169,12 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
         raise HTTPException(
             status_code=404,
             detail=f"Flujo con ID '{flow_id}' no encontrado en el sistema.",
+        )
+
+    if flow.status == FlowStatus.PAUSED:
+        raise HTTPException(
+            status_code=403,
+            detail=f"El flujo '{flow_id}' está actualmente pausado y no acepta ejecuciones.",
         )
 
     max_mb = MAX_WEBHOOK_PAYLOAD_BYTES // (1024 * 1024)
@@ -386,6 +392,31 @@ async def register_flow(flow: FlowDefinition) -> dict[str, Any]:
     if scheduler._running:
         await scheduler.reload_flows()
     return {"message": "Flujo registrado exitosamente", "flow_id": flow.id, "version": ver}
+
+
+@app.patch("/api/flows/{flow_id}/status")
+async def update_flow_status_endpoint(flow_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Activa o pausa un flujo operativo (status: 'active' | 'paused' | 'draft')."""
+    status_str = str(payload.get("status", "")).lower()
+    try:
+        new_status = FlowStatus(status_str)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Estado '{status_str}' inválido. Valores permitidos: active, paused, draft.",
+        )
+
+    try:
+        updated = await repo.update_flow_status(flow_id, new_status)
+        if scheduler._running:
+            await scheduler.reload_flows()
+        return {
+            "message": f"Flujo '{flow_id}' actualizado a '{new_status.value}'",
+            "flow_id": flow_id,
+            "status": updated.status.value,
+        }
+    except ValueError as err:
+        raise HTTPException(status_code=404, detail=str(err))
 
 
 @app.get("/api/flows/{flow_id}/versions")
