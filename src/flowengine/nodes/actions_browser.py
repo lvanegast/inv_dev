@@ -36,8 +36,16 @@ class BrowserAction(BaseNode):
                 url = f"{header},{urllib.parse.quote(raw_content)}"
 
         actions = cfg.get("actions", [])
-        headless = bool(cfg.get("headless", True))
-        timeout_ms = int(cfg.get("timeout_ms", 10000))
+        headless = cfg.get("headless", True)
+        # Permitir que el payload del trigger defina si se ejecuta en segundo plano o con ventana visible
+        for ctx_key in ("trigger", "__trigger_payload__"):
+            if ctx_key in context and isinstance(context[ctx_key], dict):
+                t_body = context[ctx_key].get("body", {})
+                if isinstance(t_body, dict) and "headless" in t_body:
+                    headless = t_body["headless"]
+                    break
+        headless = bool(headless)
+        timeout_ms = int(cfg.get("timeout_ms", 15000))
         viewport = cfg.get("viewport", {"width": 1280, "height": 800})
 
         try:

@@ -1,93 +1,95 @@
 id: rpa-portal-scraping
-name: "RPA Operativo: Validación de Trámites en Portal ERP"
-description: "Automatización de tareas del personal operativo con Playwright: abre el Portal Corporativo ERP, introduce el folio de factura, operador y proveedor, hace clic en Procesar Trámite, valida la aprobación fiscal y captura el comprobante en pantalla."
+name: "RPA Operativo: Monitoreo de Precios en Tienda E-Commerce Real"
+description: "Automatización de compras e inventario con Playwright: entra a la tienda online real books.toscrape.com, extrae productos, precios en vivo y disponibilidad de stock, y captura la pantalla del catálogo."
 status: active
 
 trigger:
   id: rpa_trigger
-  name: "Disparador de Trámite Operativo"
+  name: "Disparador de Monitoreo E-Commerce"
   type: trigger_webhook
   config:
     example_payload:
-      ticket_id: "FAC-2026-901"
-      operador: "Marta Gómez"
-      proveedor: "Corporación Acero Andino S.A."
+      categoria: "Travel"
+      operador: "Analista de Adquisiciones"
+      headless: true
 
 nodes:
   # 1. Automatización Robótica en Vivo con Playwright
   - id: execute_browser_automation
-    name: "RPA: Procesar Trámite en Portal ERP"
+    name: "RPA: Extraer Catálogo y Precios en Vivo"
     type: action_browser
     config:
-      url: "http://127.0.0.1:8000/portal-operativo"
+      url: "https://books.toscrape.com/catalogue/category/books/travel_2/index.html"
       headless: true
       timeout_ms: 15000
       actions:
         - action: "wait_for_selector"
-          selector: "#ticket_id"
-        - action: "fill"
-          selector: "#ticket_id"
-          value: "{{trigger.body.ticket_id}}"
-        - action: "fill"
-          selector: "#operador"
-          value: "{{trigger.body.operador}}"
-        - action: "fill"
-          selector: "#proveedor"
-          value: "{{trigger.body.proveedor}}"
-        - action: "click"
-          selector: "#btn_procesar"
-        - action: "wait_for_selector"
-          selector: "#resultado_tramite"
+          selector: "ol.row li:nth-child(1) h3 a"
         - action: "extract_text"
-          selector: "#estado_aprobacion"
-          key: "estado_tramite"
+          selector: ".page-header h1"
+          key: "categoria_catalogo"
         - action: "extract_text"
-          selector: "#folio_fiscal"
-          key: "folio_fiscal"
+          selector: "ol.row li:nth-child(1) h3 a"
+          key: "producto_1_nombre"
         - action: "extract_text"
-          selector: "#mensaje_confirmacion"
-          key: "mensaje_confirmacion"
+          selector: "ol.row li:nth-child(1) .price_color"
+          key: "producto_1_precio"
+        - action: "extract_text"
+          selector: "ol.row li:nth-child(1) .availability"
+          key: "producto_1_stock"
+        - action: "extract_text"
+          selector: "ol.row li:nth-child(2) h3 a"
+          key: "producto_2_nombre"
+        - action: "extract_text"
+          selector: "ol.row li:nth-child(2) .price_color"
+          key: "producto_2_precio"
+        - action: "extract_text"
+          selector: "ol.row li:nth-child(2) .availability"
+          key: "producto_2_stock"
         - action: "screenshot"
-          path: "screenshots/comprobante_erp_{{trigger.body.ticket_id}}.png"
+          path: "screenshots/catalogo_ecommerce_{{trigger.body.categoria}}.png"
 
   # 2. Consolidar datos extraídos
   - id: format_rpa_summary
-    name: "Transform: Consolidar Datos de RPA"
+    name: "Transform: Consolidar Precios y Stock"
     type: action_transform
     config:
-      ticket: "{{trigger.body.ticket_id}}"
-      operador: "{{trigger.body.operador}}"
-      proveedor: "{{trigger.body.proveedor}}"
-      estado: "{{execute_browser_automation.extracted.estado_tramite}}"
-      folio: "{{execute_browser_automation.extracted.folio_fiscal}}"
+      categoria: "{{execute_browser_automation.extracted.categoria_catalogo}}"
+      item_1: "{{execute_browser_automation.extracted.producto_1_nombre}}"
+      precio_1: "{{execute_browser_automation.extracted.producto_1_precio}}"
+      stock_1: "{{execute_browser_automation.extracted.producto_1_stock}}"
+      item_2: "{{execute_browser_automation.extracted.producto_2_nombre}}"
+      precio_2: "{{execute_browser_automation.extracted.producto_2_precio}}"
+      stock_2: "{{execute_browser_automation.extracted.producto_2_stock}}"
       pantallazo: "{{execute_browser_automation.screenshot_url}}"
 
   # 3. Guardar registro en la base de datos de auditoría
   - id: init_rpa_db
-    name: "SQL: Crear Tabla de Auditoría RPA"
+    name: "SQL: Crear Tabla de Precios E-Commerce"
     type: action_sql
     config:
-      query: "CREATE TABLE IF NOT EXISTS rpa_records (id INTEGER PRIMARY KEY AUTOINCREMENT, ticket TEXT UNIQUE, operator TEXT, auth_code TEXT, status TEXT, screenshot TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"
+      query: "CREATE TABLE IF NOT EXISTS price_monitoring (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, item1 TEXT, price1 TEXT, item2 TEXT, price2 TEXT, screenshot TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);"
 
   - id: save_rpa_record
-    name: "SQL: Guardar Trámite RPA"
+    name: "SQL: Guardar Reporte de Precios"
     type: action_sql
     config:
-      query: "INSERT INTO rpa_records (ticket, operator, auth_code, status, screenshot) VALUES (?, ?, ?, ?, ?) ON CONFLICT(ticket) DO UPDATE SET operator=excluded.operator, auth_code=excluded.auth_code, status=excluded.status, screenshot=excluded.screenshot, created_at=CURRENT_TIMESTAMP;"
+      query: "INSERT INTO price_monitoring (category, item1, price1, item2, price2, screenshot) VALUES (?, ?, ?, ?, ?, ?);"
       params:
-        - "{{format_rpa_summary.ticket}}"
-        - "{{format_rpa_summary.operador}}"
-        - "{{format_rpa_summary.folio}}"
-        - "{{format_rpa_summary.estado}}"
+        - "{{format_rpa_summary.categoria}}"
+        - "{{format_rpa_summary.item_1}}"
+        - "{{format_rpa_summary.precio_1}}"
+        - "{{format_rpa_summary.item_2}}"
+        - "{{format_rpa_summary.precio_2}}"
         - "{{format_rpa_summary.pantallazo}}"
 
   # 4. Registrar en el log del sistema
   - id: log_rpa_completion
-    name: "Log: Auditoría Final RPA"
+    name: "Log: Auditoría Final de Precios"
     type: action_log
     config:
       level: info
-      message: "Trámite {{trigger.body.ticket_id}} autorizado con éxito en portal ERP para {{trigger.body.proveedor}}. Folio: {{execute_browser_automation.extracted.folio_fiscal}}. Evidencia: {{execute_browser_automation.screenshot_url}}"
+      message: "Precios extraídos con éxito de tienda online para categoría {{execute_browser_automation.extracted.categoria_catalogo}}. Item 1: {{execute_browser_automation.extracted.producto_1_nombre}} a {{execute_browser_automation.extracted.producto_1_precio}}. Captura: {{execute_browser_automation.screenshot_url}}"
 
 edges:
   - source: rpa_trigger
