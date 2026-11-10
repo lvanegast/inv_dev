@@ -679,8 +679,9 @@
         const randId = Math.floor(100 + Math.random() * 900);
         payloadTextarea.value = JSON.stringify({
           body: {
-            username: "operador_" + randId,
-            departamento: "Mesa de Operaciones"
+            ticket_id: "FAC-2026-" + randId,
+            operador: "Marta Gómez",
+            proveedor: "Corporación Acero Andino S.A."
           }
         }, null, 2);
       } else if (example) {

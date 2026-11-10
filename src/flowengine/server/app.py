@@ -75,8 +75,18 @@ async def admin_auth_middleware(request: Request, call_next):
             path == "/health"
             or path.startswith("/webhook/")
             or path.startswith("/screenshots/")
+            or path.startswith("/portal-operativo")
             or path.startswith("/api/auth/")
-            or path in ("/docs", "/swagger", "/openapi.json", "/metrics", "/", "/dashboard", "/screenshots")
+            or path in (
+                "/docs",
+                "/swagger",
+                "/openapi.json",
+                "/metrics",
+                "/",
+                "/dashboard",
+                "/screenshots",
+                "/portal-operativo",
+            )
             or path.endswith("/openapi.json")
             or path.endswith("/docs")
         )
@@ -159,6 +169,15 @@ async def dashboard() -> HTMLResponse:
     template_file = TEMPLATES_DIR / "dashboard.html"
     if not template_file.exists():
         raise HTTPException(status_code=500, detail="Plantilla de Dashboard no encontrada.")
+    return HTMLResponse(content=template_file.read_text(encoding="utf-8"))
+
+
+@app.get("/portal-operativo", response_class=HTMLResponse)
+async def portal_operativo() -> HTMLResponse:
+    """Portal corporativo de operaciones y trámites para automatizaciones RPA."""
+    template_file = TEMPLATES_DIR / "portal_operativo.html"
+    if not template_file.exists():
+        raise HTTPException(status_code=500, detail="Plantilla de Portal Operativo no encontrada.")
     return HTMLResponse(content=template_file.read_text(encoding="utf-8"))
 
 
