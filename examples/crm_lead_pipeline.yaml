@@ -18,6 +18,34 @@ trigger:
       email: "MARIA.TORRES@ACME.CORP "
       company: "Acme Industrial S.A."
       budget: 15000.0
+    form_fields:
+      - name: full_name
+        label: "Nombre Completo del Prospecto"
+        type: text
+        default: "María Elena Torres"
+        placeholder: "Nombre y apellido"
+        help_text: "El sistema normalizará mayúsculas y espacios automáticamente."
+        required: true
+      - name: email
+        label: "Correo Electrónico Corporativo"
+        type: email
+        default: "maria.torres@acme.corp"
+        placeholder: "contacto@empresa.com"
+        help_text: "Se validará que no pertenezca a dominios de prueba desechables."
+        required: true
+      - name: company
+        label: "Empresa / Organización"
+        type: text
+        default: "Acme Industrial S.A."
+        placeholder: "Nombre de la empresa"
+        required: true
+      - name: budget
+        label: "Presupuesto Estimado ($)"
+        type: number
+        default: 15000.0
+        placeholder: "10000"
+        help_text: "Monto proyectado para el proyecto o adquisición."
+        required: true
 
 nodes:
   # 1. Normalizar y limpiar datos con biblioteca de funciones de texto

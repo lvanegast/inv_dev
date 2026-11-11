@@ -12,6 +12,32 @@ trigger:
       categoria: "Travel"
       operador: "Analista de Adquisiciones"
       headless: true
+    form_fields:
+      - name: categoria
+        label: "Categoría de Productos"
+        type: select
+        options:
+          - "Travel"
+          - "Mystery"
+          - "Historical Fiction"
+          - "Sequential Art"
+          - "Classics"
+          - "Philosophy"
+        default: "Travel"
+        help_text: "Seleccione la categoría de la tienda online que el robot debe inspeccionar."
+        required: true
+      - name: operador
+        label: "Nombre del Operador Responsable"
+        type: text
+        default: "Analista de Adquisiciones"
+        placeholder: "Ej: Juan Pérez / Mesa de Operaciones"
+        help_text: "Identificador del personal que solicita la extracción."
+        required: true
+      - name: headless
+        label: "Modo Silencioso (Headless)"
+        type: boolean
+        default: true
+        help_text: "Activar para ejecutar en segundo plano sin desplegar ventana gráfica."
 
 nodes:
   # 1. Automatización Robótica en Vivo con Playwright

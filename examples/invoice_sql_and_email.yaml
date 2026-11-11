@@ -12,6 +12,35 @@ trigger:
       customer_name: "Ana Valencia"
       amount: 250.0
       invoice_ref: "FAC-2026-901"
+    form_fields:
+      - name: customer_name
+        label: "Nombre del Cliente"
+        type: text
+        default: "Ana Valencia"
+        placeholder: "Ej: Ana Valencia"
+        help_text: "Razón social o nombre completo del titular de la factura."
+        required: true
+      - name: customer_email
+        label: "Correo Electrónico del Cliente"
+        type: email
+        default: "ana.valencia@empresa.com"
+        placeholder: "cliente@empresa.com"
+        help_text: "Dirección de destino donde se enviará el recibo fiscal."
+        required: true
+      - name: amount
+        label: "Monto Subtotal ($)"
+        type: number
+        default: 250.0
+        placeholder: "250.00"
+        help_text: "Monto base antes de impuestos (IVA 19%)."
+        required: true
+      - name: invoice_ref
+        label: "Número de Referencia / Factura"
+        type: text
+        default: "FAC-2026-901"
+        placeholder: "FAC-2026-XXX"
+        help_text: "Código de factura único para registro contable."
+        required: true
 
 nodes:
   # 1. Consultar o inicializar registro del cliente en la base de datos local

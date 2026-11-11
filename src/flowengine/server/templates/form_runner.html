@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ejecutar Tarea Operativa - FlowEngine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(51, 65, 85, 0.8);
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans bg-slate-950 text-slate-100 antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- Navegación Superior -->
+  <header class="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-30 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <a href="/forms" class="text-slate-400 hover:text-white text-sm font-medium flex items-center gap-2 transition">
+          <i class="fa-solid fa-arrow-left"></i>
+          <span>Volver al Catálogo</span>
+        </a>
+        <span class="text-slate-600">/</span>
+        <span id="navFlowTitle" class="text-slate-200 text-sm font-semibold truncate max-w-xs sm:max-w-md">Cargando tarea...</span>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <a href="/dashboard" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-gauge text-slate-400"></i>
+          <span>Consola Técnica</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal en 2 Columnas -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+
+      <!-- Columna Izquierda: Formulario Operativo (5 columnas en LG) -->
+      <div class="lg:col-span-5 glass-panel rounded-2xl p-6 sm:p-7 shadow-2xl relative">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div>
+            <span id="flowBadge" class="text-[11px] font-mono text-indigo-400 uppercase tracking-wider font-semibold block mb-1">Automatización Operativa</span>
+            <h1 id="flowTitle" class="text-xl sm:text-2xl font-black text-white tracking-tight">Cargando...</h1>
+          </div>
+          <span id="statusBadge" class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-medium">...</span>
+        </div>
+
+        <p id="flowDesc" class="text-xs sm:text-sm text-slate-400 leading-relaxed mb-6">
+          Por favor espere mientras se carga la configuración del formulario...
+        </p>
+
+        <!-- Formulario Renderizado Dinámicamente -->
+        <form id="dynamicForm" onsubmit="handleFormSubmit(event)" class="space-y-4">
+          <div id="fieldsContainer" class="space-y-4">
+            <div class="py-12 text-center text-slate-500">
+              <i class="fa-solid fa-circle-notch fa-spin text-xl mb-2 text-indigo-500 block"></i>
+              <span>Generando campos interactivos...</span>
+            </div>
+          </div>
+
+          <!-- Botón de Envío -->
+          <div class="pt-4 border-t border-slate-800">
+            <button type="submit" id="submitBtn" class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white font-bold text-sm shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+              <i class="fa-solid fa-play text-xs"></i>
+              <span id="btnText">Ejecutar Automatización</span>
+            </button>
+            <p class="text-[11px] text-slate-500 text-center mt-2">
+              Los datos serán procesados por el motor de flujos en tiempo real.
+            </p>
+          </div>
+        </form>
+      </div>
+
+      <!-- Columna Derecha: Panel de Monitoreo y Resultados en Vivo (7 columnas en LG) -->
+      <div class="lg:col-span-7 space-y-6">
+
+        <!-- Tarjeta de Estado de Ejecución -->
+        <div id="executionCard" class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-800">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-tower-broadcast text-indigo-400"></i>
+              <span>Monitoreo de Ejecución</span>
+            </h3>
+            <span id="execStateBadge" class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+              En Espera
+            </span>
+          </div>
+
+          <!-- Mensaje Inicial o Barra de Progreso -->
+          <div id="execPlaceholder" class="py-12 text-center text-slate-500 border border-dashed border-slate-800 rounded-xl">
+            <i class="fa-solid fa-laptop-code text-3xl mb-3 text-slate-600 block"></i>
+            <p class="text-sm font-medium text-slate-400">Completa el formulario y pulsa Ejecutar</p>
+            <p class="text-xs text-slate-500 mt-1">Los pasos del proceso, tiempos de respuesta y resultados aparecerán aquí.</p>
+          </div>
+
+          <!-- Progreso Activo / Pasos -->
+          <div id="execStepsContainer" class="hidden space-y-3">
+            <div class="flex items-center justify-between text-xs text-slate-400 pb-2 border-b border-slate-800">
+              <span id="runIdLabel" class="font-mono text-indigo-400">Run ID: -</span>
+              <span id="durationLabel" class="font-mono">0.00 ms</span>
+            </div>
+            <div id="stepsList" class="space-y-2 max-h-64 overflow-y-auto pr-1"></div>
+          </div>
+        </div>
+
+        <!-- Evidencia Visual (Screenshot de Navegador / RPA) -->
+        <div id="visualEvidenceCard" class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-800 hidden">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-camera text-sky-400"></i>
+              <span>Captura de Pantalla del Proceso (Evidencia Visual)</span>
+            </h3>
+            <button onclick="openCurrentScreenshot()" class="text-xs text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1">
+              <i class="fa-solid fa-expand"></i>
+              <span>Ampliar</span>
+            </button>
+          </div>
+          <div class="rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950 flex items-center justify-center p-1 group relative cursor-pointer" onclick="openCurrentScreenshot()">
+            <img id="evidenceImg" src="" alt="Captura de Pantalla RPA" class="max-h-72 w-full object-contain rounded-lg">
+            <div class="absolute inset-0 bg-slate-950/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-semibold gap-2 backdrop-blur-xs">
+              <i class="fa-solid fa-magnifying-glass-plus text-base"></i>
+              <span>Clic para ver en pantalla completa</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resultados Estructurados Extraídos -->
+        <div id="resultsCard" class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-800 hidden">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <i class="fa-solid fa-clipboard-check text-emerald-400"></i>
+              <span>Datos Extraídos / Resumen Operativo</span>
+            </h3>
+            <button onclick="copyOutputData()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs border border-slate-700 transition flex items-center gap-1">
+              <i class="fa-regular fa-copy"></i>
+              <span id="copyBtnText">Copiar Datos</span>
+            </button>
+          </div>
+          <div id="structuredOutput" class="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-80 overflow-y-auto"></div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal Lightbox para Ampliar Imagen -->
+  <div id="lightboxModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md hidden flex items-center justify-center p-4" onclick="closeLightbox()">
+    <div class="relative max-w-5xl max-h-[90vh] bg-slate-900 border border-slate-800 rounded-2xl p-2 shadow-2xl overflow-hidden" onclick="event.stopPropagation()">
+      <div class="flex items-center justify-between px-4 py-2 border-b border-slate-800 mb-2">
+        <span class="text-xs font-semibold text-slate-300 flex items-center gap-2">
+          <i class="fa-solid fa-camera text-sky-400"></i>
+          <span>Evidencia Visual RPA</span>
+        </span>
+        <button onclick="closeLightbox()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+          <i class="fa-solid fa-xmark text-sm"></i>
+        </button>
+      </div>
+      <img id="lightboxImg" src="" alt="Captura Ampliada" class="max-h-[80vh] w-auto mx-auto object-contain rounded-lg">
+    </div>
+  </div>
+
+  <script>
+    // Obtener flow_id de la URL (/forms/{flow_id})
+    const pathParts = window.location.pathname.split("/").filter(Boolean);
+    const flowId = decodeURIComponent(pathParts[1] || "");
+    let formFields = [];
+    let currentScreenshotUrl = "";
+    let lastOutputData = null;
+
+    async function loadFormDefinition() {
+      if (!flowId) {
+        alert("ID de flujo no especificado.");
+        window.location.href = "/forms";
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/forms/${encodeURIComponent(flowId)}/schema`);
+        if (!res.ok) throw new Error("No se pudo obtener la definición del formulario");
+        const data = await res.json();
+
+        // Actualizar textos de cabecera
+        document.title = `${data.flow_name || flowId} - Formulario Operativo`;
+        document.getElementById("navFlowTitle").textContent = data.flow_name || flowId;
+        document.getElementById("flowTitle").textContent = data.flow_name || flowId;
+        document.getElementById("flowDesc").textContent = data.description || "Complete los campos para iniciar el flujo.";
+        
+        const statusBadge = document.getElementById("statusBadge");
+        if (data.status === "paused") {
+          statusBadge.textContent = "Pausado";
+          statusBadge.className = "text-xs px-2.5 py-1 rounded-full bg-amber-950 text-amber-300 border border-amber-800 font-medium";
+          document.getElementById("submitBtn").disabled = true;
+          document.getElementById("btnText").textContent = "Flujo Pausado";
+        } else {
+          statusBadge.textContent = "Activo";
+          statusBadge.className = "text-xs px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-medium";
+        }
+
+        formFields = data.fields || [];
+        renderFields(formFields);
+      } catch (err) {
+        document.getElementById("fieldsContainer").innerHTML = `
+          <div class="p-4 rounded-xl bg-rose-950/30 border border-rose-900/50 text-rose-300 text-xs text-center">
+            <i class="fa-solid fa-circle-exclamation text-base mb-1 block"></i>
+            Error cargando formulario: ${err.message}
+          </div>`;
+      }
+    }
+
+    function renderFields(fields) {
+      const container = document.getElementById("fieldsContainer");
+      if (!fields || fields.length === 0) {
+        container.innerHTML = `
+          <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs text-center">
+            Este flujo no requiere parámetros iniciales. Haz clic directamente en <strong>Ejecutar</strong>.
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = fields.map(f => {
+        const fieldId = `field_${f.name}`;
+        const reqBadge = f.required ? '<span class="text-rose-400 ml-1">*</span>' : '';
+        const help = f.help_text ? `<p class="text-[11px] text-slate-500 mt-1">${f.help_text}</p>` : '';
+
+        // Campo Booleano (Toggle Switch)
+        if (f.type === "boolean") {
+          const isChecked = f.default === true || f.default === "true";
+          return `
+            <div class="p-3.5 rounded-xl bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 transition">
+              <div class="flex items-center justify-between">
+                <div>
+                  <label for="${fieldId}" class="text-xs font-semibold text-slate-200 cursor-pointer">${f.label || f.name} ${reqBadge}</label>
+                  ${f.help_text ? `<p class="text-[11px] text-slate-500">${f.help_text}</p>` : ''}
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="${fieldId}" name="${f.name}" class="sr-only peer" ${isChecked ? 'checked' : ''}>
+                  <div class="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                </label>
+              </div>
+            </div>`;
+        }
+
+        // Campo Select (Desplegable)
+        if (f.type === "select" && f.options && f.options.length > 0) {
+          const optionsHtml = f.options.map(opt => {
+            const val = typeof opt === "object" ? opt.value : opt;
+            const label = typeof opt === "object" ? opt.label : opt;
+            const selected = String(val) === String(f.default) ? 'selected' : '';
+            return `<option value="${val}" ${selected} class="bg-slate-900 text-slate-100">${label}</option>`;
+          }).join("");
+
+          return `
+            <div>
+              <label for="${fieldId}" class="block text-xs font-semibold text-slate-300 mb-1.5">${f.label || f.name} ${reqBadge}</label>
+              <select id="${fieldId}" name="${f.name}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                ${optionsHtml}
+              </select>
+              ${help}
+            </div>`;
+        }
+
+        // Campo Textarea
+        if (f.type === "textarea") {
+          return `
+            <div>
+              <label for="${fieldId}" class="block text-xs font-semibold text-slate-300 mb-1.5">${f.label || f.name} ${reqBadge}</label>
+              <textarea id="${fieldId}" name="${f.name}" rows="3" placeholder="${f.placeholder || ''}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none font-mono">${f.default !== null && f.default !== undefined ? f.default : ''}</textarea>
+              ${help}
+            </div>`;
+        }
+
+        // Campo Número
+        if (f.type === "number") {
+          return `
+            <div>
+              <label for="${fieldId}" class="block text-xs font-semibold text-slate-300 mb-1.5">${f.label || f.name} ${reqBadge}</label>
+              <input type="number" step="any" id="${fieldId}" name="${f.name}" value="${f.default !== null && f.default !== undefined ? f.default : ''}" placeholder="${f.placeholder || ''}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none" ${f.required ? 'required' : ''}>
+              ${help}
+            </div>`;
+        }
+
+        // Campo Texto por Defecto (text, email, url)
+        return `
+          <div>
+            <label for="${fieldId}" class="block text-xs font-semibold text-slate-300 mb-1.5">${f.label || f.name} ${reqBadge}</label>
+            <input type="${f.type === 'email' ? 'email' : (f.type === 'url' ? 'url' : 'text')}" id="${fieldId}" name="${f.name}" value="${f.default !== null && f.default !== undefined ? f.default : ''}" placeholder="${f.placeholder || ''}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-slate-100 text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none" ${f.required ? 'required' : ''}>
+            ${help}
+          </div>`;
+      }).join("");
+    }
+
+    async function handleFormSubmit(e) {
+      e.preventDefault();
+      const submitBtn = document.getElementById("submitBtn");
+      const btnText = document.getElementById("btnText");
+      submitBtn.disabled = true;
+      btnText.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Ejecutando...';
+
+      // Construir payload a partir de los campos
+      const payloadBody = {};
+      formFields.forEach(f => {
+        const el = document.getElementById(`field_${f.name}`);
+        if (!el) return;
+        if (f.type === "boolean") {
+          payloadBody[f.name] = el.checked;
+        } else if (f.type === "number") {
+          payloadBody[f.name] = el.value === "" ? null : Number(el.value);
+        } else if (f.type === "textarea" && f.name === "payload") {
+          try {
+            const parsed = JSON.parse(el.value);
+            Object.assign(payloadBody, parsed);
+          } catch (_) {
+            payloadBody[f.name] = el.value;
+          }
+        } else {
+          payloadBody[f.name] = el.value;
+        }
+      });
+
+      // Resetear paneles de UI
+      document.getElementById("execPlaceholder").classList.add("hidden");
+      document.getElementById("execStepsContainer").classList.remove("hidden");
+      document.getElementById("visualEvidenceCard").classList.add("hidden");
+      document.getElementById("resultsCard").classList.add("hidden");
+      document.getElementById("stepsList").innerHTML = "";
+
+      const execBadge = document.getElementById("execStateBadge");
+      execBadge.textContent = "Ejecutando...";
+      execBadge.className = "text-xs px-2.5 py-1 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800 animate-pulse font-mono";
+
+      try {
+        const res = await fetch(`/api/flows/${encodeURIComponent(flowId)}/run`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: payloadBody })
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({ detail: "Error desconocido" }));
+          throw new Error(errData.detail || "Fallo en la ejecución");
+        }
+
+        const runResult = await res.json();
+        renderExecutionResult(runResult);
+      } catch (err) {
+        execBadge.textContent = "Error";
+        execBadge.className = "text-xs px-2.5 py-1 rounded-full bg-rose-950 text-rose-300 border border-rose-800 font-mono";
+        document.getElementById("stepsList").innerHTML = `
+          <div class="p-3 rounded-xl bg-rose-950/40 border border-rose-900/60 text-rose-300 text-xs">
+            <i class="fa-solid fa-triangle-exclamation mr-1.5"></i>
+            <strong>Error de ejecución:</strong> ${err.message}
+          </div>`;
+      } finally {
+        submitBtn.disabled = false;
+        btnText.textContent = "Ejecutar Automatización";
+      }
+    }
+
+    function renderExecutionResult(run) {
+      const execBadge = document.getElementById("execStateBadge");
+      const isSuccess = run.status === "success";
+      
+      execBadge.textContent = isSuccess ? "Completado con Éxito" : "Finalizado con Advertencias";
+      execBadge.className = isSuccess 
+        ? "text-xs px-2.5 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono"
+        : "text-xs px-2.5 py-1 rounded-full bg-rose-950 text-rose-300 border border-rose-800 font-mono";
+
+      document.getElementById("runIdLabel").textContent = `Run ID: ${run.run_id ? run.run_id.substring(0, 8) + '...' : ''}`;
+      document.getElementById("durationLabel").textContent = `${(run.duration_ms || 0).toFixed(2)} ms`;
+
+      // Renderizar pasos
+      const stepsList = document.getElementById("stepsList");
+      const steps = run.step_results || {};
+      let screenshotFound = null;
+      let aggregatedOutput = {};
+
+      stepsList.innerHTML = Object.entries(steps).map(([stepId, step]) => {
+        const stepSuccess = step.status === "success";
+        const stepSkipped = step.status === "skipped";
+        let icon = "fa-check text-emerald-400";
+        let bg = "bg-slate-900/80 border-slate-800";
+        if (!stepSuccess && !stepSkipped) {
+          icon = "fa-xmark text-rose-400";
+          bg = "bg-rose-950/20 border-rose-900/40";
+        } else if (stepSkipped) {
+          icon = "fa-forward text-slate-500";
+          bg = "bg-slate-900/40 border-slate-800/50";
+        }
+
+        // Inspeccionar output en busca de screenshots o datos clave
+        if (step.output_data) {
+          if (typeof step.output_data === "object") {
+            Object.assign(aggregatedOutput, step.output_data);
+            if (step.output_data.screenshot_path) {
+              screenshotFound = step.output_data.screenshot_path;
+            }
+          }
+        }
+
+        return `
+          <div class="p-2.5 rounded-xl ${bg} border flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid ${icon}"></i>
+              <span class="font-medium text-slate-200">${stepId}</span>
+              ${step.error ? `<span class="text-rose-400 text-[11px] truncate max-w-xs block">(${step.error})</span>` : ''}
+            </div>
+            <span class="font-mono text-[11px] text-slate-400">${(step.duration_ms || 0).toFixed(1)} ms</span>
+          </div>`;
+      }).join("");
+
+      // Si hay screenshot, mostrar evidencia visual
+      if (screenshotFound) {
+        currentScreenshotUrl = "/" + screenshotFound.replace(/\\/g, "/");
+        const evidenceImg = document.getElementById("evidenceImg");
+        evidenceImg.src = currentScreenshotUrl + "?t=" + Date.now();
+        document.getElementById("visualEvidenceCard").classList.remove("hidden");
+      }
+
+      // Si hay datos estructurados, renderizar tarjetas
+      lastOutputData = aggregatedOutput;
+      const filteredKeys = Object.entries(aggregatedOutput).filter(([k, v]) => 
+        k !== "screenshot_path" && typeof v !== "object"
+      );
+
+      if (filteredKeys.length > 0) {
+        const outContainer = document.getElementById("structuredOutput");
+        outContainer.innerHTML = filteredKeys.map(([k, v]) => `
+          <div class="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+            <span class="text-[10px] font-mono uppercase tracking-wider text-indigo-400 block mb-0.5">${k.replace(/_/g, " ")}</span>
+            <span class="text-xs font-semibold text-white block truncate" title="${v}">${v}</span>
+          </div>
+        `).join("");
+        document.getElementById("resultsCard").classList.remove("hidden");
+      }
+    }
+
+    function openCurrentScreenshot() {
+      if (!currentScreenshotUrl) return;
+      document.getElementById("lightboxImg").src = currentScreenshotUrl;
+      document.getElementById("lightboxModal").classList.remove("hidden");
+    }
+
+    function closeLightbox() {
+      document.getElementById("lightboxModal").classList.add("hidden");
+    }
+
+    function copyOutputData() {
+      if (!lastOutputData) return;
+      navigator.clipboard.writeText(JSON.stringify(lastOutputData, null, 2)).then(() => {
+        const btn = document.getElementById("copyBtnText");
+        btn.textContent = "¡Copiado!";
+        setTimeout(() => { btn.textContent = "Copiar Datos"; }, 2000);
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", loadFormDefinition);
+  </script>
+</body>
+</html>

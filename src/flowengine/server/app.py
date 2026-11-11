@@ -26,6 +26,7 @@ from flowengine.core.throttling import default_throttler
 from flowengine.nodes.actions_http import close_shared_http_client
 from flowengine.nodes.registry import list_available_nodes
 from flowengine.server.auth import check_request_authenticated, get_admin_api_key
+from flowengine.server.forms import extract_flow_form_fields
 from flowengine.server.openapi import generate_flow_openapi, get_scalar_ui_html
 from flowengine.server.streaming import execution_broker, format_sse
 from flowengine.storage.repository import FlowRepository
@@ -76,8 +77,11 @@ async def admin_auth_middleware(request: Request, call_next):
             or path.startswith("/webhook/")
             or path.startswith("/screenshots/")
             or path.startswith("/portal-operativo")
+            or path.startswith("/forms")
+            or path.startswith("/api/forms")
             or path.startswith("/api/auth/")
-            or path in (
+            or path
+            in (
                 "/docs",
                 "/swagger",
                 "/openapi.json",
@@ -86,15 +90,12 @@ async def admin_auth_middleware(request: Request, call_next):
                 "/dashboard",
                 "/screenshots",
                 "/portal-operativo",
+                "/forms",
             )
             or path.endswith("/openapi.json")
             or path.endswith("/docs")
         )
-        if (
-            not is_public
-            and path.startswith("/api/")
-            and not check_request_authenticated(request)
-        ):
+        if not is_public and path.startswith("/api/") and not check_request_authenticated(request):
             return JSONResponse(
                 status_code=401,
                 content={"detail": "Acceso no autorizado: API Key administrativa inválida o ausente."},
@@ -179,6 +180,130 @@ async def portal_operativo() -> HTMLResponse:
     if not template_file.exists():
         raise HTTPException(status_code=500, detail="Plantilla de Portal Operativo no encontrada.")
     return HTMLResponse(content=template_file.read_text(encoding="utf-8"))
+
+
+@app.get("/forms", response_class=HTMLResponse)
+async def forms_catalog() -> HTMLResponse:
+    """Portal de formularios web operativos para el personal de operaciones."""
+    template_file = TEMPLATES_DIR / "forms_index.html"
+    if not template_file.exists():
+        raise HTTPException(status_code=500, detail="Plantilla de Catálogo de Formularios no encontrada.")
+    return HTMLResponse(content=template_file.read_text(encoding="utf-8"))
+
+
+@app.get("/forms/{flow_id}", response_class=HTMLResponse)
+async def form_runner_page(flow_id: str) -> HTMLResponse:
+    """Página de ejecución visual interactiva de una tarea operativa."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flujo con ID '{flow_id}' no encontrado.")
+    template_file = TEMPLATES_DIR / "form_runner.html"
+    if not template_file.exists():
+        raise HTTPException(status_code=500, detail="Plantilla de Formulario Operativo no encontrada.")
+    return HTMLResponse(content=template_file.read_text(encoding="utf-8"))
+
+
+@app.get("/api/forms")
+async def list_operator_forms() -> list[dict[str, Any]]:
+    """Retorna el listado de flujos disponibles como formularios para operadores."""
+    flows = await repo.list_flows()
+    results = []
+    for f in flows:
+        fields = extract_flow_form_fields(f)
+        results.append(
+            {
+                "id": f.id,
+                "name": f.name,
+                "description": f.description,
+                "status": f.status.value,
+                "step_count": len(f.nodes),
+                "field_count": len(fields),
+            }
+        )
+    return results
+
+
+@app.get("/api/forms/{flow_id}/schema")
+async def get_form_schema(flow_id: str) -> dict[str, Any]:
+    """Retorna el esquema de campos visuales para un flujo operativo."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flujo con ID '{flow_id}' no encontrado.")
+    fields = extract_flow_form_fields(flow)
+    return {
+        "flow_id": flow.id,
+        "flow_name": flow.name,
+        "description": flow.description,
+        "status": flow.status.value,
+        "fields": [field.model_dump() for field in fields],
+    }
+
+
+@app.post("/api/forms/{flow_id}/submit")
+async def submit_operator_form(flow_id: str, request: Request) -> dict[str, Any]:
+    """Procesa y ejecuta un formulario operativo completado por un usuario."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flujo con ID '{flow_id}' no encontrado.")
+
+    if flow.status == FlowStatus.PAUSED:
+        raise HTTPException(
+            status_code=403,
+            detail=f"El flujo '{flow_id}' está actualmente pausado y no acepta ejecuciones.",
+        )
+
+    if flow.rate_limit:
+        allowed, retry_after = default_throttler.check_rate_limit(flow_id, flow.rate_limit)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Límite de tasa ('{flow.rate_limit}') excedido para el flujo '{flow_id}'.",
+                headers={"Retry-After": str(int(retry_after) + 1)},
+            )
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    form_payload = body.get("body", body) if isinstance(body, dict) else {}
+
+    trigger_payload = {
+        "body": form_payload,
+        "headers": dict(request.headers),
+        "query_params": dict(request.query_params),
+        "triggered_at": datetime.now(UTC).isoformat(),
+        "source": "operator_form",
+    }
+
+    trace_ctx = TraceContext.from_traceparent(request.headers.get("traceparent"))
+
+    async def on_event(evt: dict[str, Any]) -> None:
+        run_id = evt.get("run_id")
+        if run_id:
+            await execution_broker.publish(run_id, evt)
+
+    async with default_throttler.acquire_concurrency(flow_id, flow.concurrency_limit):
+        runner = FlowRunner(flow, on_event=on_event, trace_context=trace_ctx)
+        run_result = await runner.run(trigger_payload=trigger_payload)
+    await repo.save_run(run_result)
+
+    return {
+        "run_id": run_result.run_id,
+        "flow_id": flow_id,
+        "trace_id": trace_ctx.trace_id,
+        "status": run_result.status.value,
+        "duration_ms": run_result.duration_ms,
+        "step_results": {
+            k: {
+                "status": v.status.value,
+                "duration_ms": v.duration_ms,
+                "error": v.error,
+                "output_data": v.output_data,
+            }
+            for k, v in run_result.step_results.items()
+        },
+    }
 
 
 @app.get("/api/stats")
@@ -622,9 +747,7 @@ async def run_flow_endpoint(
 
             async def execution_worker() -> None:
                 try:
-                    async with default_throttler.acquire_concurrency(
-                        flow_id, flow.concurrency_limit
-                    ):
+                    async with default_throttler.acquire_concurrency(flow_id, flow.concurrency_limit):
                         runner = FlowRunner(flow, on_event=on_event, trace_context=trace_ctx)
                         run_result = await runner.run(trigger_payload=trigger_payload)
                         await repo.save_run(run_result)
@@ -744,9 +867,7 @@ async def get_run_detail(run_id: str) -> dict[str, Any]:
 
 
 @app.get("/api/dlq")
-async def get_dead_letter_queue(
-    flow_id: str | None = None, limit: int = 50
-) -> list[dict[str, Any]]:
+async def get_dead_letter_queue(flow_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
     """Retorna las ejecuciones fallidas retenidas en la Dead Letter Queue (DLQ)."""
     return await repo.list_dlq_runs(flow_id=flow_id, limit=limit)
 
