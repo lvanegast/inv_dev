@@ -872,6 +872,18 @@ async def get_run_detail(run_id: str) -> dict[str, Any]:
     return run
 
 
+@app.get("/api/runs/{run_id}/audit")
+async def get_run_audit_endpoint(run_id: str) -> dict[str, Any]:
+    """Genera un reporte de auditoría integral y análisis de rendimiento para una ejecución."""
+    audit = await repo.get_run_audit(run_id)
+    if not audit:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Reporte de auditoría no disponible: corrida con ID '{run_id}' no encontrada.",
+        )
+    return audit
+
+
 @app.get("/api/dlq")
 async def get_dead_letter_queue(flow_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
     """Retorna las ejecuciones fallidas retenidas en la Dead Letter Queue (DLQ)."""

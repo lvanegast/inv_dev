@@ -56,6 +56,27 @@ def build_alert_payload(
             ],
         }
 
+    if alert.channel == AlertChannel.TEAMS:
+        return {
+            "@type": "MessageCard",
+            "@context": "http://schema.org/extensions",
+            "themeColor": "ef4444",
+            "summary": f"Alerta FlowEngine: {flow.name} ha fallado",
+            "title": f"⚠️ Alerta FlowEngine: {flow.name}",
+            "sections": [
+                {
+                    "activityTitle": f"Fallo en Ejecución: {run.run_id}",
+                    "facts": [
+                        {"name": "Flow ID:", "value": flow.id},
+                        {"name": "Paso Fallido:", "value": failed_node_str},
+                        {"name": "Duración:", "value": f"{run.duration_ms:.1f}ms"},
+                        {"name": "Error:", "value": str(error_summary)[:1024]},
+                    ],
+                    "markdown": True,
+                }
+            ],
+        }
+
     # Canal genérico Webhook HTTP
     return {
         "event": "flow_run_failed",

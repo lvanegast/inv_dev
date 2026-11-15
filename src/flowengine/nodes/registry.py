@@ -11,6 +11,7 @@ from flowengine.nodes.actions_email import EmailAction
 from flowengine.nodes.actions_filter import FilterAction
 from flowengine.nodes.actions_http import HttpRequestAction
 from flowengine.nodes.actions_log import LogAction
+from flowengine.nodes.actions_notify import NotifyAction
 from flowengine.nodes.actions_sql import SqlAction
 from flowengine.nodes.actions_subflow import SubflowAction
 from flowengine.nodes.actions_tabular import TabularAction
@@ -36,6 +37,7 @@ BUILTIN_NODES: dict[str, type[BaseNode]] = {
     "action_email": EmailAction,
     "action_browser": BrowserAction,
     "action_tabular": TabularAction,
+    "action_notify": NotifyAction,
 }
 
 NODE_REGISTRY: dict[str, type[BaseNode]] = dict(BUILTIN_NODES)
@@ -110,6 +112,8 @@ def list_available_nodes() -> list[dict[str, Any]]:
             category = "trigger"
         elif "iterator" in type_name or "aggregator" in type_name or "tabular" in type_name:
             category = "batch"
+        elif "notify" in type_name or "email" in type_name:
+            category = "notification"
         else:
             category = "action"
 

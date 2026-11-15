@@ -9,9 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 # Regex estándar para validar y parsear W3C Traceparent: 00-{32hex}-{16hex}-{2hex}
-TRACEPARENT_REGEX = re.compile(
-    r"^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$", re.IGNORECASE
-)
+TRACEPARENT_REGEX = re.compile(r"^00-([0-9a-f]{32})-([0-9a-f]{16})-([0-9a-f]{2})$", re.IGNORECASE)
 
 
 class TraceContext:
@@ -123,6 +121,10 @@ class MetricsRegistry:
         self._step_duration_sums: dict[str, float] = defaultdict(float)
         self._step_duration_counts: dict[str, int] = defaultdict(int)
         self._active_runs: dict[str, int] = defaultdict(int)
+        self._batch_items_total: dict[str, int] = defaultdict(int)
+        self._batch_duration_sums: dict[str, float] = defaultdict(float)
+        self._batch_duration_counts: dict[str, int] = defaultdict(int)
+        self._batch_throughput_samples: dict[str, float] = defaultdict(float)
 
     def record_run(self, flow_id: str, status: str, duration_seconds: float) -> None:
         """Registra la finalización de una corrida de flujo."""
@@ -135,6 +137,15 @@ class MetricsRegistry:
         self._step_counts[(node_type, status)] += 1
         self._step_duration_sums[node_type] += duration_seconds
         self._step_duration_counts[node_type] += 1
+
+    def record_batch(self, flow_id: str, items_count: int, duration_seconds: float) -> None:
+        """Registra métricas detalladas de rendimiento para procesamiento por lotes (iterators)."""
+        self._batch_items_total[flow_id] += items_count
+        self._batch_duration_sums[flow_id] += duration_seconds
+        self._batch_duration_counts[flow_id] += 1
+        if duration_seconds > 0:
+            throughput = items_count / duration_seconds
+            self._batch_throughput_samples[flow_id] = round(throughput, 2)
 
     def increment_active_runs(self, flow_id: str) -> None:
         self._active_runs[flow_id] += 1
@@ -151,39 +162,76 @@ class MetricsRegistry:
         for (flow_id, status), count in sorted(self._run_counts.items()):
             lines.append(f'flowengine_flow_runs_total{{flow_id="{flow_id}",status="{status}"}} {count}')
 
-        lines.extend([
-            "# HELP flowengine_flow_run_duration_seconds Duración acumulada de corridas por flujo",
-            "# TYPE flowengine_flow_run_duration_seconds summary",
-        ])
+        lines.extend(
+            [
+                "# HELP flowengine_flow_run_duration_seconds Duración acumulada de corridas por flujo",
+                "# TYPE flowengine_flow_run_duration_seconds summary",
+            ]
+        )
         for flow_id, count in sorted(self._run_duration_counts.items()):
             total_sum = round(self._run_duration_sums[flow_id], 4)
             lines.append(f'flowengine_flow_run_duration_seconds_sum{{flow_id="{flow_id}"}} {total_sum}')
             lines.append(f'flowengine_flow_run_duration_seconds_count{{flow_id="{flow_id}"}} {count}')
 
-        lines.extend([
-            "# HELP flowengine_step_executions_total Total de ejecuciones de nodos por tipo y resultado",
-            "# TYPE flowengine_step_executions_total counter",
-        ])
+        lines.extend(
+            [
+                "# HELP flowengine_step_executions_total Total de ejecuciones de nodos por tipo y resultado",
+                "# TYPE flowengine_step_executions_total counter",
+            ]
+        )
         for (node_type, status), count in sorted(self._step_counts.items()):
             lines.append(
                 f'flowengine_step_executions_total{{node_type="{node_type}",status="{status}"}} {count}'
             )
 
-        lines.extend([
-            "# HELP flowengine_step_duration_seconds Duración acumulada de nodos por tipo",
-            "# TYPE flowengine_step_duration_seconds summary",
-        ])
+        lines.extend(
+            [
+                "# HELP flowengine_step_duration_seconds Duración acumulada de nodos por tipo",
+                "# TYPE flowengine_step_duration_seconds summary",
+            ]
+        )
         for node_type, count in sorted(self._step_duration_counts.items()):
             total_sum = round(self._step_duration_sums[node_type], 4)
             lines.append(f'flowengine_step_duration_seconds_sum{{node_type="{node_type}"}} {total_sum}')
             lines.append(f'flowengine_step_duration_seconds_count{{node_type="{node_type}"}} {count}')
 
-        lines.extend([
-            "# HELP flowengine_active_runs Ejecuciones concurrentes activas actualmente",
-            "# TYPE flowengine_active_runs gauge",
-        ])
+        lines.extend(
+            [
+                "# HELP flowengine_active_runs Ejecuciones concurrentes activas actualmente",
+                "# TYPE flowengine_active_runs gauge",
+            ]
+        )
         for flow_id, active in sorted(self._active_runs.items()):
             lines.append(f'flowengine_active_runs{{flow_id="{flow_id}"}} {active}')
+
+        lines.extend(
+            [
+                "# HELP flowengine_batch_items_total Total de items procesados en bucles de lotes",
+                "# TYPE flowengine_batch_items_total counter",
+            ]
+        )
+        for flow_id, total_items in sorted(self._batch_items_total.items()):
+            lines.append(f'flowengine_batch_items_total{{flow_id="{flow_id}"}} {total_items}')
+
+        lines.extend(
+            [
+                "# HELP flowengine_batch_duration_seconds Duración acumulada de procesamiento de lotes",
+                "# TYPE flowengine_batch_duration_seconds summary",
+            ]
+        )
+        for flow_id, count in sorted(self._batch_duration_counts.items()):
+            dur_sum = round(self._batch_duration_sums[flow_id], 4)
+            lines.append(f'flowengine_batch_duration_seconds_sum{{flow_id="{flow_id}"}} {dur_sum}')
+            lines.append(f'flowengine_batch_duration_seconds_count{{flow_id="{flow_id}"}} {count}')
+
+        lines.extend(
+            [
+                "# HELP flowengine_batch_throughput_items_per_second Tasa de procesamiento de lotes por segundo",
+                "# TYPE flowengine_batch_throughput_items_per_second gauge",
+            ]
+        )
+        for flow_id, rate in sorted(self._batch_throughput_samples.items()):
+            lines.append(f'flowengine_batch_throughput_items_per_second{{flow_id="{flow_id}"}} {rate}')
 
         return "\n".join(lines) + "\n"
 
@@ -196,6 +244,10 @@ class MetricsRegistry:
         self._step_duration_sums.clear()
         self._step_duration_counts.clear()
         self._active_runs.clear()
+        self._batch_items_total.clear()
+        self._batch_duration_sums.clear()
+        self._batch_duration_counts.clear()
+        self._batch_throughput_samples.clear()
 
 
 class TelemetryManager:

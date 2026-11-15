@@ -227,6 +227,75 @@ class FlowRepository:
                 "error": row["error"],
             }
 
+    async def get_run_audit(self, run_id: str) -> dict[str, Any] | None:
+        """Genera un reporte de auditoría operativa exhaustivo para una ejecución de flujo."""
+        run = await self.get_run(run_id)
+        if not run:
+            return None
+
+        flow = await self.get_flow(run["flow_id"])
+        step_results = run.get("step_results", {})
+        trigger_payload = run.get("trigger_payload", {})
+
+        # 1. Auditoría de pasos y latencias
+        total_steps = len(step_results)
+        succeeded = sum(1 for s in step_results.values() if s.get("status") == "success")
+        failed = sum(1 for s in step_results.values() if s.get("status") == "failed")
+        skipped = sum(1 for s in step_results.values() if s.get("status") == "skipped")
+
+        slowest_step = None
+        max_duration = -1.0
+        for nid, s in step_results.items():
+            dur = float(s.get("duration_ms", 0.0))
+            if dur > max_duration:
+                max_duration = dur
+                slowest_step = {"node_id": nid, "duration_ms": dur, "status": s.get("status")}
+
+        # 2. Auditoría de procesamiento por lotes (Batch)
+        batch_audit: dict[str, Any] = {"has_batch_processing": False}
+        for nid, s in step_results.items():
+            out = s.get("output_data") or {}
+            if isinstance(out, dict) and "iterations" in out:
+                batch_audit = {
+                    "has_batch_processing": True,
+                    "iterator_node": nid,
+                    "items_processed": out.get("iterations", 0),
+                    "batch_duration_ms": out.get("batch_duration_ms", s.get("duration_ms", 0.0)),
+                    "throughput_items_per_sec": out.get("throughput_items_per_sec", 0.0),
+                }
+                break
+
+        # 3. Auditoría de seguridad e integridad
+        headers = trigger_payload.get("headers", {})
+        has_auth_header = any(h.lower() in ("authorization", "x-api-key") for h in headers)
+        idempotency_key = headers.get("idempotency-key") or headers.get("x-idempotency-key")
+
+        return {
+            "run_id": run["run_id"],
+            "flow_id": run["flow_id"],
+            "flow_name": flow.name if flow else run["flow_id"],
+            "status": run["status"],
+            "started_at": run["started_at"],
+            "finished_at": run["finished_at"],
+            "total_duration_ms": run["duration_ms"],
+            "audit_verdict": "HEALTHY" if run["status"] == "success" else "FAULTY",
+            "steps_summary": {
+                "total": total_steps,
+                "succeeded": succeeded,
+                "failed": failed,
+                "skipped": skipped,
+                "slowest_step": slowest_step,
+            },
+            "batch_performance": batch_audit,
+            "security_posture": {
+                "source": trigger_payload.get("source", "external_trigger"),
+                "has_authenticated_header": has_auth_header,
+                "idempotency_key_used": idempotency_key,
+                "sanitized": True,
+            },
+            "error_diagnostics": run["error"] or (slowest_step.get("node_id") if failed > 0 else None),
+        }
+
     async def list_dlq_runs(self, flow_id: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
         """Lista las ejecuciones fallidas retenidas en la Dead Letter Queue (DLQ)."""
         async with self.db_manager.get_connection() as db:
@@ -312,9 +381,7 @@ class FlowRepository:
             )
             await db.commit()
 
-    async def get_connection(
-        self, connection_id: str, decrypt: bool = True
-    ) -> ConnectionDefinition | None:
+    async def get_connection(self, connection_id: str, decrypt: bool = True) -> ConnectionDefinition | None:
         """Recupera una conexión por su ID, descifrando opcionalmente sus credenciales."""
         async with (
             self.db_manager.get_connection() as db,
@@ -399,9 +466,7 @@ class FlowRepository:
                 "expires_at": row["expires_at"],
             }
 
-    async def create_idempotency_record(
-        self, key: str, flow_id: str, ttl_seconds: int = 86400
-    ) -> bool:
+    async def create_idempotency_record(self, key: str, flow_id: str, ttl_seconds: int = 86400) -> bool:
         """Reserva una clave de idempotencia en estado 'processing'. Retorna True si se reservó."""
         now = datetime.now(UTC)
         expires_at = (now + timedelta(seconds=ttl_seconds)).isoformat()

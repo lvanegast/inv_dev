@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
@@ -189,6 +190,7 @@ class FlowRunner:
         handled_in_loop.update(loop_nodes)
 
         # 3. Ejecutar el bucle para cada item
+        loop_start = time.monotonic()
         loop_results: list[dict[str, Any]] = []
 
         for idx, item in enumerate(items):
@@ -214,7 +216,13 @@ class FlowRunner:
 
         context["__loop_results__"] = loop_results
 
-        # 4. Registrar en step_results de la ejecución
+        # 4. Registrar métricas de lote en telemetría y step_results
+        loop_duration_sec = time.monotonic() - loop_start
+        loop_duration_ms = round(loop_duration_sec * 1000, 2)
+        throughput = round(len(items) / loop_duration_sec, 2) if loop_duration_sec > 0 else 0.0
+
+        telemetry.metrics.record_batch(self.flow.id, len(items), loop_duration_sec)
+
         for loop_nid in loop_nodes:
             last_out = (
                 loop_results[-1].get(loop_nid) if loop_results and loop_nid in loop_results[-1] else None
@@ -224,11 +232,13 @@ class FlowRunner:
                 status=NodeStatus.SUCCESS if items else NodeStatus.SKIPPED,
                 started_at=datetime.now(UTC),
                 finished_at=datetime.now(UTC),
-                duration_ms=0.0,
+                duration_ms=loop_duration_ms,
                 input_data={},
                 output_data={
                     "iterations": len(items),
                     "sample": last_out,
+                    "batch_duration_ms": loop_duration_ms,
+                    "throughput_items_per_sec": throughput,
                 },
             )
             context[f"__node_status_{loop_nid}"] = "success"

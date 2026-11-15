@@ -41,6 +41,8 @@ class AlertChannel(StrEnum):
     WEBHOOK = "webhook"
     SLACK = "slack"
     DISCORD = "discord"
+    TEAMS = "teams"
+    EMAIL = "email"
 
 
 class AlertConfig(BaseModel):

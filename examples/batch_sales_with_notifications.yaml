@@ -1,0 +1,104 @@
+id: batch-sales-notifications
+name: "Procesamiento de Ventas con Auditoría Batch y Notificación Slack/Teams"
+description: "Ingesta transacciones comerciales, itera y audita el rendimiento del lote (throughput y latencia), exporta la planilla consolidada y despacha una notificación ejecutiva a Slack o Microsoft Teams."
+status: active
+
+trigger:
+  id: webhook_trigger
+  name: "Ingesta de Transacciones"
+  type: trigger_webhook
+  config:
+    example_payload:
+      canal: "Mesa de Operaciones Mayorista"
+      moneda: "USD"
+
+nodes:
+  # 1. Leer planilla de operaciones
+  - id: leer_datos_ventas
+    name: "Tabular: Ingesta de Operaciones"
+    type: action_tabular
+    config:
+      operation: "read"
+      content: |
+        cliente,producto,unidades,precio
+        Corporación Andina,Licencia ERP Cloud,4,850.00
+        Servicios Logísticos del Sur,Módulo de Facturación,2,420.00
+        Grupo Inversionista Norte,Integrador Bancario API,1,1200.00
+        Soluciones Retail S.A.,Terminal POS Android,6,180.00
+
+  # 2. Desempaquetar filas para auditoría e iteración por lote
+  - id: iterador_ventas
+    name: "Iterador: Procesar Lote de Ventas"
+    type: action_iterator
+    config:
+      array: "{{leer_datos_ventas.rows}}"
+
+  # 3. Procesamiento y cálculo de subtotal por registro
+  - id: calcular_renglon
+    name: "Cálculo: Liquidar Renglón de Venta"
+    type: action_code
+    config:
+      code: |
+        raw = input.get("iterador_ventas", {})
+        item = raw.get("item", raw)
+        cant = float(item.get("unidades", 1))
+        precio = float(item.get("precio", 0.0))
+        total = round(cant * precio, 2)
+        output = {
+            "cliente": item.get("cliente"),
+            "producto": item.get("producto"),
+            "unidades": cant,
+            "precio": precio,
+            "total": total
+        }
+
+  # 4. Agregación y consolidación de la lista procesada
+  - id: consolidar_lote
+    name: "Agregador: Consolidar Total de Ventas"
+    type: action_aggregator
+    config:
+      source_node: "calcular_renglon"
+      operation: "list"
+
+  # 5. Exportar reporte Excel de cierre
+  - id: exportar_excel_cierre
+    name: "Tabular: Generar Planilla de Cierre"
+    type: action_tabular
+    config:
+      operation: "write"
+      format: "xlsx"
+      sheet_name: "CierreOperativo"
+      path: "exports/cierre_operativo_ventas.xlsx"
+      rows: "{{consolidar_lote.aggregated}}"
+
+  # 6. Despachar notificación operativa enriquecida con métricas del lote
+  - id: notificar_cierre
+    name: "Notificación: Alerta de Cierre a Slack/Teams"
+    type: action_notify
+    config:
+      channel: "slack"
+      webhook_url: "https://httpbin.org/post"
+      status: "success"
+      title: "Liquidación y Cierre de Ventas Completado"
+      message: "El procesamiento del lote de transacciones comerciales ha concluido exitosamente."
+      fields:
+        - name: "Registros Liquidados"
+          value: "{{consolidar_lote.count}} operaciones"
+        - name: "Archivo Generado"
+          value: "{{exportar_excel_cierre.path}}"
+        - name: "Canal Imputado"
+          value: "{{webhook_trigger.body.canal}}"
+
+edges:
+  - source: webhook_trigger
+    target: leer_datos_ventas
+  - source: leer_datos_ventas
+    target: iterador_ventas
+  - source: iterador_ventas
+    target: calcular_renglon
+  - source: calcular_renglon
+    target: consolidar_lote
+  - source: consolidar_lote
+    target: exportar_excel_cierre
+  - source: exportar_excel_cierre
+    target: notificar_cierre
