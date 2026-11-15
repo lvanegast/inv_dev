@@ -144,6 +144,8 @@
                       (f.nodes && f.nodes.some(n => n.type === "action_browser"));
         const isInvoice = f.name && (f.name.toLowerCase().includes("factura") || f.name.toLowerCase().includes("invoice"));
         const isCrm = f.name && (f.name.toLowerCase().includes("crm") || f.name.toLowerCase().includes("lead"));
+        const isTabular = (f.name && (f.name.toLowerCase().includes("excel") || f.name.toLowerCase().includes("csv") || f.name.toLowerCase().includes("planilla"))) ||
+                          (f.nodes && f.nodes.some(n => n.type === "action_tabular"));
 
         let icon = "fa-bolt";
         let iconColor = "text-indigo-400 bg-indigo-500/10 border-indigo-500/20";
@@ -153,6 +155,10 @@
           icon = "fa-robot";
           iconColor = "text-sky-400 bg-sky-500/10 border-sky-500/20";
           tag = "RPA / Navegador Web";
+        } else if (isTabular) {
+          icon = "fa-file-excel";
+          iconColor = "text-teal-400 bg-teal-500/10 border-teal-500/20";
+          tag = "Planillas / Excel & CSV";
         } else if (isInvoice) {
           icon = "fa-file-invoice-dollar";
           iconColor = "text-emerald-400 bg-emerald-500/10 border-emerald-500/20";

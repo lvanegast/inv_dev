@@ -1,0 +1,132 @@
+id: excel-batch-processor
+name: "Procesador Masivo de Planillas Excel y CSV (Ingesta & Exportación)"
+description: "Lee una planilla de ventas u operaciones (.xlsx o .csv), itera y valida cada registro con el motor de lotes, calcula comisiones e impuestos en Python y genera un nuevo archivo Excel estilizado y descargable con totales consolidados."
+status: active
+
+trigger:
+  id: upload_trigger
+  name: "Formulario de Ingesta de Planilla"
+  type: trigger_webhook
+  config:
+    example_payload:
+      archivo_ventas: ""
+      canal_ventas: "Corporativo"
+      tasa_comision: 0.05
+    form_fields:
+      - name: archivo_ventas
+        label: "Planilla de Ventas (.xlsx o .csv)"
+        type: file
+        help_text: "Seleccione un archivo Excel (.xlsx) o CSV con columnas: cliente, producto, cantidad, precio_unitario."
+        required: false
+      - name: canal_ventas
+        label: "Canal Comercial"
+        type: select
+        options:
+          - "Corporativo"
+          - "Mayorista"
+          - "Retail Online"
+        default: "Corporativo"
+        help_text: "Canal contable al cual imputar las operaciones procesadas."
+        required: true
+      - name: tasa_comision
+        label: "Tasa de Comisión Comercial (%)"
+        type: number
+        default: 0.05
+        placeholder: "0.05"
+        help_text: "Porcentaje de comisión para el equipo de ventas (ej. 0.05 para 5%)."
+        required: true
+
+nodes:
+  # 1. Leer y estructurar el archivo CSV/Excel (usando archivo subido o dataset demostrativo)
+  - id: read_sales_data
+    name: "Tabular: Ingestar Planilla Excel/CSV"
+    type: action_tabular
+    config:
+      operation: "read"
+      base64: "{{upload_trigger.body.archivo_ventas}}"
+      # Datos de contingencia en CSV si no se adjunta archivo en la prueba
+      content: |
+        cliente,producto,cantidad,precio_unitario
+        TecnoSur SpA,Servidor Rack 2U,2,1250.00
+        Inversiones Los Andes,Licencia Enterprise Cloud,5,320.00
+        Consultora Alfa,Estación de Trabajo CAD,3,890.50
+        Distribuidora Global,Switch Gigabit 48 Puertos,4,410.00
+      has_headers: true
+      strip_whitespace: true
+
+  # 2. Desempaquetar filas para procesamiento individual
+  - id: iterate_sales_rows
+    name: "Iterador: Procesar Fila por Fila"
+    type: action_iterator
+    config:
+      array: "{{read_sales_data.rows}}"
+
+  # 3. Transformación matemática y validación por fila
+  - id: compute_row_totals
+    name: "Cálculo: Subtotal, Comisión y Total"
+    type: action_code
+    config:
+      code: |
+        raw = input.get("iterate_sales_rows", {})
+        row = raw.get("item", raw)
+        cliente = str(row.get("cliente", "Sin Cliente"))
+        producto = str(row.get("producto", "Sin Producto"))
+        cantidad = float(row.get("cantidad", 1))
+        precio = float(row.get("precio_unitario", 0.0))
+        tasa = float(input.get("upload_trigger", {}).get("body", {}).get("tasa_comision", 0.05))
+
+        subtotal = round(cantidad * precio, 2)
+        comision = round(subtotal * tasa, 2)
+        total_linea = round(subtotal + comision, 2)
+
+        output = {
+            "cliente": cliente,
+            "producto": producto,
+            "cantidad": cantidad,
+            "precio_unitario": precio,
+            "subtotal": subtotal,
+            "comision": comision,
+            "total_linea": total_linea,
+            "canal": input.get("upload_trigger", {}).get("body", {}).get("canal_ventas", "General")
+        }
+
+  # 4. Consolidar todas las filas procesadas en una lista final
+  - id: aggregate_sales
+    name: "Agregador: Consolidar Filas Procesadas"
+    type: action_aggregator
+    config:
+      source_node: "compute_row_totals"
+      operation: "list"
+
+  # 5. Generar archivo Excel (.xlsx) corporativo con los totales consolidados
+  - id: export_final_excel
+    name: "Tabular: Exportar Planilla Excel Estilizada"
+    type: action_tabular
+    config:
+      operation: "write"
+      format: "xlsx"
+      sheet_name: "LiquidacionVentas"
+      path: "exports/liquidacion_ventas_procesada.xlsx"
+      rows: "{{aggregate_sales.aggregated}}"
+
+  # 6. Registrar auditoría operativa
+  - id: log_processing_summary
+    name: "Log: Resumen Operativo"
+    type: action_log
+    config:
+      level: "info"
+      message: "Planilla de ventas procesada exitosamente. Total registros liquidados: {{aggregate_sales.count}}. Archivo generado en: {{export_final_excel.path}} (Tamaño: {{export_final_excel.size_bytes}} bytes)."
+
+edges:
+  - source: upload_trigger
+    target: read_sales_data
+  - source: read_sales_data
+    target: iterate_sales_rows
+  - source: iterate_sales_rows
+    target: compute_row_totals
+  - source: compute_row_totals
+    target: aggregate_sales
+  - source: aggregate_sales
+    target: export_final_excel
+  - source: export_final_excel
+    target: log_processing_summary

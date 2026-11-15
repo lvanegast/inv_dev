@@ -5,6 +5,7 @@ from flowengine.nodes.actions_browser import BrowserAction
 from flowengine.nodes.actions_email import EmailAction
 from flowengine.nodes.actions_sql import SqlAction
 from flowengine.nodes.actions_subflow import SubflowAction
+from flowengine.nodes.actions_tabular import TabularAction
 from flowengine.nodes.base import BaseNode
 from flowengine.nodes.registry import (
     BUILTIN_NODES,
@@ -25,6 +26,7 @@ __all__ = [
     "IteratorNode",
     "SqlAction",
     "SubflowAction",
+    "TabularAction",
     "BUILTIN_NODES",
     "NODE_REGISTRY",
     "create_node_instance",

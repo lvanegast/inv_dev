@@ -109,6 +109,25 @@
           </div>
         </div>
 
+        <!-- Tarjeta de Descarga de Archivo Exportado (Excel / CSV) -->
+        <div id="exportCard" class="glass-panel rounded-2xl p-4 shadow-xl border border-emerald-800/60 bg-emerald-950/20 hidden">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-lg">
+                <i class="fa-solid fa-file-excel"></i>
+              </div>
+              <div>
+                <h4 class="text-xs font-bold text-white">Archivo Excel / CSV Generado</h4>
+                <p id="exportedFileName" class="text-[11px] text-emerald-300 font-mono"></p>
+              </div>
+            </div>
+            <a id="downloadExportBtn" href="#" download class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition flex items-center gap-1.5 shadow-md shadow-emerald-600/30">
+              <i class="fa-solid fa-download"></i>
+              <span>Descargar</span>
+            </a>
+          </div>
+        </div>
+
         <!-- Evidencia Visual (Screenshot de Navegador / RPA) -->
         <div id="visualEvidenceCard" class="glass-panel rounded-2xl p-6 shadow-xl border border-slate-800 hidden">
           <div class="flex items-center justify-between mb-3">
@@ -172,6 +191,25 @@
     let formFields = [];
     let currentScreenshotUrl = "";
     let lastOutputData = null;
+    const uploadedFiles = {};
+
+    function handleFileChange(event, fieldId) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const label = document.getElementById(`${fieldId}_filename`);
+      if (label) {
+        label.textContent = `📄 ${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+      }
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        uploadedFiles[fieldId] = {
+          name: file.name,
+          base64: e.target.result,
+          size: file.size
+        };
+      };
+      reader.readAsDataURL(file);
+    }
 
     async function loadFormDefinition() {
       if (!flowId) {
@@ -265,6 +303,21 @@
             </div>`;
         }
 
+        // Campo Archivo (Excel / CSV / etc.)
+        if (f.type === "file") {
+          return `
+            <div>
+              <label for="${fieldId}" class="block text-xs font-semibold text-slate-300 mb-1.5">${f.label || f.name} ${reqBadge}</label>
+              <div class="relative border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center cursor-pointer transition bg-slate-950/60" onclick="document.getElementById('${fieldId}').click()">
+                <i class="fa-solid fa-file-excel text-emerald-400 text-xl mb-1 block"></i>
+                <span id="${fieldId}_filename" class="text-xs text-slate-300 font-medium block truncate">Seleccionar o arrastrar archivo (.xlsx, .csv)</span>
+                <span class="text-[10px] text-slate-500">Haz clic aquí para cargar tu archivo</span>
+                <input type="file" id="${fieldId}" name="${f.name}" accept=".xlsx,.xls,.csv,.txt" class="hidden" onchange="handleFileChange(event, '${fieldId}')" ${f.required ? 'required' : ''}>
+              </div>
+              ${help}
+            </div>`;
+        }
+
         // Campo Textarea
         if (f.type === "textarea") {
           return `
@@ -305,9 +358,15 @@
       // Construir payload a partir de los campos
       const payloadBody = {};
       formFields.forEach(f => {
-        const el = document.getElementById(`field_${f.name}`);
-        if (!el) return;
-        if (f.type === "boolean") {
+        const fieldId = `field_${f.name}`;
+        const el = document.getElementById(fieldId);
+        if (!el && f.type !== "file") return;
+        if (f.type === "file") {
+          if (uploadedFiles[fieldId]) {
+            payloadBody[f.name] = uploadedFiles[fieldId].base64;
+            payloadBody[f.name + "_name"] = uploadedFiles[fieldId].name;
+          }
+        } else if (f.type === "boolean") {
           payloadBody[f.name] = el.checked;
         } else if (f.type === "number") {
           payloadBody[f.name] = el.value === "" ? null : Number(el.value);
@@ -378,6 +437,7 @@
       const stepsList = document.getElementById("stepsList");
       const steps = run.step_results || {};
       let screenshotFound = null;
+      let exportedFileFound = null;
       let aggregatedOutput = {};
 
       stepsList.innerHTML = Object.entries(steps).map(([stepId, step]) => {
@@ -393,12 +453,15 @@
           bg = "bg-slate-900/40 border-slate-800/50";
         }
 
-        // Inspeccionar output en busca de screenshots o datos clave
+        // Inspeccionar output en busca de screenshots, archivos exportados o datos clave
         if (step.output_data) {
           if (typeof step.output_data === "object") {
             Object.assign(aggregatedOutput, step.output_data);
             if (step.output_data.screenshot_path) {
               screenshotFound = step.output_data.screenshot_path;
+            }
+            if (step.output_data.path && (step.output_data.path.endsWith(".xlsx") || step.output_data.path.endsWith(".csv"))) {
+              exportedFileFound = step.output_data.path;
             }
           }
         }
@@ -413,6 +476,16 @@
             <span class="font-mono text-[11px] text-slate-400">${(step.duration_ms || 0).toFixed(1)} ms</span>
           </div>`;
       }).join("");
+
+      // Si hay archivo exportado, mostrar tarjeta de descarga
+      if (exportedFileFound) {
+        const downloadUrl = "/" + exportedFileFound.replace(/\\/g, "/");
+        const btn = document.getElementById("downloadExportBtn");
+        btn.href = downloadUrl;
+        btn.download = exportedFileFound.split(/[\\/]/).pop();
+        document.getElementById("exportedFileName").textContent = exportedFileFound.split(/[\\/]/).pop();
+        document.getElementById("exportCard").classList.remove("hidden");
+      }
 
       // Si hay screenshot, mostrar evidencia visual
       if (screenshotFound) {

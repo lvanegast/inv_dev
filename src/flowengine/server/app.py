@@ -65,6 +65,10 @@ SCREENSHOTS_DIR = Path("screenshots")
 SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/screenshots", StaticFiles(directory=str(SCREENSHOTS_DIR)), name="screenshots")
 
+EXPORTS_DIR = Path("exports")
+EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/exports", StaticFiles(directory=str(EXPORTS_DIR)), name="exports")
+
 
 @app.middleware("http")
 async def admin_auth_middleware(request: Request, call_next):
@@ -76,6 +80,7 @@ async def admin_auth_middleware(request: Request, call_next):
             path == "/health"
             or path.startswith("/webhook/")
             or path.startswith("/screenshots/")
+            or path.startswith("/exports/")
             or path.startswith("/portal-operativo")
             or path.startswith("/forms")
             or path.startswith("/api/forms")
@@ -89,6 +94,7 @@ async def admin_auth_middleware(request: Request, call_next):
                 "/",
                 "/dashboard",
                 "/screenshots",
+                "/exports",
                 "/portal-operativo",
                 "/forms",
             )

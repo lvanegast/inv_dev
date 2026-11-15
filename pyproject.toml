@@ -16,6 +16,7 @@ dependencies = [
     "aiosqlite>=0.20.0",
     "cryptography>=50.0.2",
     "playwright>=1.64.1",
+    "openpyxl",
 ]
 
 [project.scripts]

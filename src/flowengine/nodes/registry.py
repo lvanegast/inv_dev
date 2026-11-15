@@ -13,6 +13,7 @@ from flowengine.nodes.actions_http import HttpRequestAction
 from flowengine.nodes.actions_log import LogAction
 from flowengine.nodes.actions_sql import SqlAction
 from flowengine.nodes.actions_subflow import SubflowAction
+from flowengine.nodes.actions_tabular import TabularAction
 from flowengine.nodes.actions_transform import CodeAction, TransformAction
 from flowengine.nodes.base import BaseNode
 from flowengine.nodes.triggers import ManualTrigger, ScheduleTrigger, WebhookTrigger
@@ -34,6 +35,7 @@ BUILTIN_NODES: dict[str, type[BaseNode]] = {
     "action_sql": SqlAction,
     "action_email": EmailAction,
     "action_browser": BrowserAction,
+    "action_tabular": TabularAction,
 }
 
 NODE_REGISTRY: dict[str, type[BaseNode]] = dict(BUILTIN_NODES)
@@ -106,19 +108,21 @@ def list_available_nodes() -> list[dict[str, Any]]:
         doc = (cls.__doc__ or "").strip().split("\n")[0]
         if type_name.startswith("trigger_"):
             category = "trigger"
-        elif "iterator" in type_name or "aggregator" in type_name:
+        elif "iterator" in type_name or "aggregator" in type_name or "tabular" in type_name:
             category = "batch"
         else:
             category = "action"
 
-        items.append({
-            "type": type_name,
-            "class_name": cls.__name__,
-            "module": cls.__module__,
-            "is_builtin": type_name in BUILTIN_NODES,
-            "category": category,
-            "description": doc,
-        })
+        items.append(
+            {
+                "type": type_name,
+                "class_name": cls.__name__,
+                "module": cls.__module__,
+                "is_builtin": type_name in BUILTIN_NODES,
+                "category": category,
+                "description": doc,
+            }
+        )
     return items
 
 

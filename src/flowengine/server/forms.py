@@ -116,7 +116,9 @@ def extract_flow_form_fields(flow: FlowDefinition) -> list[FormFieldDefinition]:
                 field_type = "number"
             elif isinstance(val, str):
                 lower_key = key.lower()
-                if "email" in lower_key or "correo" in lower_key or ("@" in val and "." in val):
+                if any(x in lower_key for x in ("archivo", "file", "excel", "csv", "planilla")):
+                    field_type = "file"
+                elif "email" in lower_key or "correo" in lower_key or ("@" in val and "." in val):
                     field_type = "email"
                 elif "url" in lower_key or "link" in lower_key:
                     field_type = "url"
