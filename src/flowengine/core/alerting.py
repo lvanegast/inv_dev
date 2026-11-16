@@ -77,6 +77,36 @@ def build_alert_payload(
             ],
         }
 
+    if alert.channel == AlertChannel.WHATSAPP:
+        return {
+            "messaging_product": "whatsapp",
+            "recipient_type": "individual",
+            "type": "text",
+            "text": {
+                "body": (
+                    f"⚠️ *Alerta FlowEngine: {flow.name}*\n\n"
+                    f"• *ID:* {flow.id}\n"
+                    f"• *Run:* `{run.run_id}`\n"
+                    f"• *Paso Fallido:* {failed_node_str}\n"
+                    f"• *Duración:* {run.duration_ms:.1f}ms\n"
+                    f"• *Error:* {error_summary}"
+                )
+            },
+        }
+
+    if alert.channel == AlertChannel.TELEGRAM:
+        return {
+            "text": (
+                f"⚠️ <b>Alerta FlowEngine: {flow.name}</b>\n\n"
+                f"• <b>Flow ID:</b> <code>{flow.id}</code>\n"
+                f"• <b>Run ID:</b> <code>{run.run_id}</code>\n"
+                f"• <b>Paso Fallido:</b> <code>{failed_node_str}</code>\n"
+                f"• <b>Duración:</b> {run.duration_ms:.1f}ms\n"
+                f"• <b>Error:</b> {error_summary}"
+            ),
+            "parse_mode": "HTML",
+        }
+
     # Canal genérico Webhook HTTP
     return {
         "event": "flow_run_failed",

@@ -43,6 +43,8 @@ class AlertChannel(StrEnum):
     DISCORD = "discord"
     TEAMS = "teams"
     EMAIL = "email"
+    WHATSAPP = "whatsapp"
+    TELEGRAM = "telegram"
 
 
 class AlertConfig(BaseModel):

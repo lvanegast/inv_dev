@@ -1,0 +1,85 @@
+id: crm-lead-mapper-and-im
+name: "Procesamiento de Leads con Data Mapper y Notificación WhatsApp/Telegram"
+description: "Limpia, normaliza y transforma prospectos comerciales mediante el motor declarativo Data Mapper, envía una alerta interactiva con botones a Telegram para el equipo de ventas y despacha un mensaje de bienvenida por WhatsApp al cliente."
+status: active
+
+trigger:
+  id: webhook_lead
+  name: "Webhook: Ingesta de Nuevo Lead"
+  type: trigger_webhook
+  config:
+    example_payload:
+      full_name: "  Valentina Morales  "
+      mobile_phone: "+57 (300) 456-7890"
+      email_address: "VALENTINA.M@EXAMPLE.COM"
+      budget_usd: "4500.50"
+      status_code: "NEW"
+
+nodes:
+  # 1. Transformación, limpieza y normalización declarativa con Data Mapper
+  - id: normalizar_lead
+    name: "Data Mapper: Normalizar Datos del Lead"
+    type: action_mapper
+    config:
+      data: "{{trigger.body}}"
+      rename:
+        full_name: "nombre"
+        mobile_phone: "telefono"
+        email_address: "email"
+        budget_usd: "presupuesto"
+      cast:
+        nombre: "strip"
+        email: "lower"
+        presupuesto: "float"
+      defaults:
+        pais: "Colombia"
+        segmento: "B2B"
+      lookup:
+        field: "status_code"
+        target_field: "estado_etiqueta"
+        table:
+          "NEW": "Nuevo Prospecto"
+          "QUALIFIED": "Calificado"
+          "CONTACTED": "En Contacto"
+        default: "Por Clasificar"
+
+  # 2. Alerta interactiva con botones a grupo de ventas en Telegram
+  - id: alerta_ventas_telegram
+    name: "Telegram: Alerta con Botones de Acción para Ventas"
+    type: action_im
+    config:
+      platform: "telegram"
+      chat_id: "-1002938475"
+      text: |
+        🎯 *Nuevo Lead Recibido*
+        • *Nombre:* {{normalizar_lead.nombre}}
+        • *Teléfono:* `{{normalizar_lead.telefono}}`
+        • *Email:* `{{normalizar_lead.email}}`
+        • *Presupuesto:* ${{normalizar_lead.presupuesto}} USD
+        • *Estado:* {{normalizar_lead.estado_etiqueta}}
+      parse_mode: "Markdown"
+      buttons:
+        - text: "✅ Tomar Lead"
+          callback_data: "claim_lead_{{normalizar_lead.nombre}}"
+        - text: "📞 Contactar Ahora"
+          url: "https://crm.corp.net/leads/{{normalizar_lead.nombre}}"
+      mock_delivery: true
+
+  # 3. Mensaje de bienvenida personalizado al cliente por WhatsApp
+  - id: bienvenida_whatsapp
+    name: "WhatsApp: Mensaje de Bienvenida al Prospecto"
+    type: action_im
+    config:
+      platform: "whatsapp"
+      to: "{{normalizar_lead.telefono}}"
+      text: "Hola {{normalizar_lead.nombre}}, gracias por contactarnos. Hemos recibido tu solicitud de presupuesto por ${{normalizar_lead.presupuesto}} USD. Un asesor te atenderá pronto."
+      preview_url: false
+      mock_delivery: true
+
+edges:
+  - source: webhook_lead
+    target: normalizar_lead
+  - source: normalizar_lead
+    target: alerta_ventas_telegram
+  - source: normalizar_lead
+    target: bienvenida_whatsapp

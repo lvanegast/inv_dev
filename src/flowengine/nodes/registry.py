@@ -10,7 +10,9 @@ from flowengine.nodes.actions_browser import BrowserAction
 from flowengine.nodes.actions_email import EmailAction
 from flowengine.nodes.actions_filter import FilterAction
 from flowengine.nodes.actions_http import HttpRequestAction
+from flowengine.nodes.actions_im import IMAction
 from flowengine.nodes.actions_log import LogAction
+from flowengine.nodes.actions_mapper import DataMapperAction
 from flowengine.nodes.actions_notify import NotifyAction
 from flowengine.nodes.actions_sql import SqlAction
 from flowengine.nodes.actions_subflow import SubflowAction
@@ -39,6 +41,8 @@ BUILTIN_NODES: dict[str, type[BaseNode]] = {
     "action_browser": BrowserAction,
     "action_tabular": TabularAction,
     "action_notify": NotifyAction,
+    "action_im": IMAction,
+    "action_mapper": DataMapperAction,
 }
 
 NODE_REGISTRY: dict[str, type[BaseNode]] = dict(BUILTIN_NODES)
