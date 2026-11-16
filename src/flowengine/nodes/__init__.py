@@ -18,6 +18,7 @@ from flowengine.nodes.registry import (
     reset_registry,
     unregister_node,
 )
+from flowengine.nodes.triggers import PollingTrigger
 
 __all__ = [
     "AggregatorNode",
@@ -26,6 +27,7 @@ __all__ = [
     "EmailAction",
     "IteratorNode",
     "NotifyAction",
+    "PollingTrigger",
     "SqlAction",
     "SubflowAction",
     "TabularAction",

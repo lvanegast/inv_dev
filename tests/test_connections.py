@@ -49,6 +49,7 @@ def clean_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     db = DatabaseManager(str(db_file))
     repo.db_manager = db
     import asyncio
+
     asyncio.run(db.init_db())
 
 

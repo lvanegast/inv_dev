@@ -60,11 +60,7 @@ def check_request_authenticated(request: Request) -> bool:
 
     x_api_key = request.headers.get("x-api-key") or request.headers.get("X-API-Key")
     auth_header = request.headers.get("authorization", "") or request.headers.get("Authorization", "")
-    bearer_key = (
-        auth_header.replace("Bearer ", "").strip()
-        if auth_header.startswith("Bearer ")
-        else None
-    )
+    bearer_key = auth_header.replace("Bearer ", "").strip() if auth_header.startswith("Bearer ") else None
     cookie_key = request.cookies.get("flowengine_admin_key")
     query_key = request.query_params.get("api_key")
 
@@ -72,4 +68,3 @@ def check_request_authenticated(request: Request) -> bool:
         cand and hmac.compare_digest(cand, expected)
         for cand in (x_api_key, bearer_key, cookie_key, query_key)
     )
-

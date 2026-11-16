@@ -35,9 +35,9 @@ def test_verify_webhook_signature():
     # 2. Con prefijo sha256=
     assert verify_webhook_signature(payload, f"sha256={correct_sig}", secret, prefix="sha256=") is True
     # Insensible a mayúsculas en el prefijo o firma
-    assert verify_webhook_signature(
-        payload, f"SHA256={correct_sig.upper()}", secret, prefix="sha256="
-    ) is True
+    assert (
+        verify_webhook_signature(payload, f"SHA256={correct_sig.upper()}", secret, prefix="sha256=") is True
+    )
 
     # 3. Payload alterado (tampered)
     altered_payload = b'{"order_id": 999, "status": "refunded"}'

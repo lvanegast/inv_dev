@@ -9,8 +9,8 @@ from flowengine.core.runner import FlowRunner
 
 def _make_flow_with_on_error(fail_node_raises: bool = True) -> FlowDefinition:
     """Crea un flujo:  trigger -> risky_node  -> success_handler (on_error=False)
-                                              -> error_handler  (on_error=True )
-                       success_handler|error_handler -> cleanup
+                           -> error_handler  (on_error=True )
+    success_handler|error_handler -> cleanup
     """
     return FlowDefinition(
         id="onerror-test",

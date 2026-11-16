@@ -38,8 +38,7 @@ async def test_browser_action_inline_html():
             type="action_browser",
             config={
                 "html": (
-                    "<html><body><h1 id='portal'>Portal Interno</h1>"
-                    "<span id='status'>OK</span></body></html>"
+                    "<html><body><h1 id='portal'>Portal Interno</h1><span id='status'>OK</span></body></html>"
                 ),
                 "headless": True,
                 "actions": [

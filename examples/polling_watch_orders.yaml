@@ -1,0 +1,65 @@
+id: polling-watch-orders
+name: "Monitoreo Incremental de Pedidos con Watermark y Alerta Slack"
+description: "Sondea periódicamente una fuente de datos operacional (SQL o REST), extrae únicamente registros con ID superior al último watermark guardado, formatea el reporte de novedades y notifica al canal de operaciones."
+status: active
+
+trigger:
+  id: watch_new_orders
+  name: "Polling: Vigilante de Nuevos Pedidos"
+  type: trigger_polling
+  config:
+    poll_source: "sql"
+    db_path: "flowengine.db"
+    table: "orders"
+    watermark_field: "id"
+    watermark_type: "numeric"
+    initial_watermark: 0
+    poll_interval_seconds: 30
+    dispatch_mode: "batch"
+
+nodes:
+  # 1. Transformación de novedades encontradas en el sondeo
+  - id: procesar_novedades
+    name: "Código: Consolidar Métricas del Lote Polling"
+    type: action_code
+    config:
+      code: |
+        trig = input.get("trigger", {})
+        records = trig.get("records", [])
+        total_monto = sum(float(r.get("total", 0.0)) for r in records)
+        output = {
+            "num_ordenes": len(records),
+            "monto_total": round(total_monto, 2),
+            "ultimo_watermark": trig.get("watermark"),
+            "ordenes": records
+        }
+
+  # 2. Generación de informe tabular de las nuevas órdenes
+  - id: exportar_ordenes_csv
+    name: "Tabular: Exportar Resumen a CSV"
+    type: action_tabular
+    config:
+      operation: "write"
+      format: "csv"
+      data: "{{procesar_novedades.ordenes}}"
+      output_path: "exports/novedades_polling_{{flow_id}}.csv"
+
+  # 3. Alerta ejecutiva a operaciones
+  - id: notificar_operaciones
+    name: "Notificación: Alerta de Nuevos Pedidos a Slack"
+    type: action_notify
+    config:
+      channel: "slack"
+      webhook_url: "https://hooks.slack.com/services/MOCK/WATERMARK/ALERT"
+      title: "Nuevos Pedidos Detectados (Polling Incremental)"
+      message: "Se detectaron {{procesar_novedades.num_ordenes}} nuevas órdenes en el sistema por un total de ${{procesar_novedades.monto_total}}. Watermark actualizado a: {{procesar_novedades.ultimo_watermark}}."
+      color: "#22c55e"
+      mock_delivery: true
+
+edges:
+  - source: watch_new_orders
+    target: procesar_novedades
+  - source: procesar_novedades
+    target: exportar_ordenes_csv
+  - source: exportar_ordenes_csv
+    target: notificar_operaciones

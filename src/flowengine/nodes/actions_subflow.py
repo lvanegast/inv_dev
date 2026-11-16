@@ -68,9 +68,7 @@ class SubflowAction(BaseNode):
 
         if not wait_for_completion:
             # Modo asíncrono fire-and-forget
-            asyncio.create_task(
-                runner.run(trigger_payload=payload, context_override=sub_context_override)
-            )
+            asyncio.create_task(runner.run(trigger_payload=payload, context_override=sub_context_override))
             return {
                 "subflow_id": target_flow_id,
                 "status": "QUEUED",

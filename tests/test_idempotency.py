@@ -153,9 +153,7 @@ async def test_webhook_idempotency_enforce_header(setup_test_db):
     flow = FlowDefinition(
         id="strict-idemp-flow",
         name="Strict Idempotency Flow",
-        idempotency=IdempotencyConfig(
-            enabled=True, header="X-Custom-Idempotency", enforce_header=True
-        ),
+        idempotency=IdempotencyConfig(enabled=True, header="X-Custom-Idempotency", enforce_header=True),
         trigger=NodeDefinition(id="trig", type="trigger_webhook"),
         nodes=[],
         edges=[],
@@ -190,9 +188,7 @@ async def test_webhook_idempotency_conflict_when_processing(setup_test_db):
     await repo.save_flow(flow)
 
     # Simular una petición actualmente en vuelo
-    await repo.create_idempotency_record(
-        key="conflict-flow:simultaneous-key", flow_id="conflict-flow"
-    )
+    await repo.create_idempotency_record(key="conflict-flow:simultaneous-key", flow_id="conflict-flow")
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

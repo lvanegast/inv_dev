@@ -17,7 +17,7 @@ from flowengine.nodes.actions_subflow import SubflowAction
 from flowengine.nodes.actions_tabular import TabularAction
 from flowengine.nodes.actions_transform import CodeAction, TransformAction
 from flowengine.nodes.base import BaseNode
-from flowengine.nodes.triggers import ManualTrigger, ScheduleTrigger, WebhookTrigger
+from flowengine.nodes.triggers import ManualTrigger, PollingTrigger, ScheduleTrigger, WebhookTrigger
 
 logger = logging.getLogger("flowengine.registry")
 
@@ -25,6 +25,7 @@ BUILTIN_NODES: dict[str, type[BaseNode]] = {
     "trigger_webhook": WebhookTrigger,
     "trigger_manual": ManualTrigger,
     "trigger_schedule": ScheduleTrigger,
+    "trigger_polling": PollingTrigger,
     "action_http": HttpRequestAction,
     "action_filter": FilterAction,
     "action_transform": TransformAction,

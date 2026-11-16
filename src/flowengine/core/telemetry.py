@@ -226,7 +226,7 @@ class MetricsRegistry:
 
         lines.extend(
             [
-                "# HELP flowengine_batch_throughput_items_per_second Tasa de procesamiento de lotes por segundo",
+                "# HELP flowengine_batch_throughput_items_per_second Tasa de items por segundo en lotes",
                 "# TYPE flowengine_batch_throughput_items_per_second gauge",
             ]
         )

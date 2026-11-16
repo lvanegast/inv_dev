@@ -67,9 +67,7 @@ async def test_auth_secured_mode_blocks_unauthorized_requests(setup_auth_db, mon
         assert res_bad.status_code == 401
 
         # 3. Petición con clave correcta vía X-API-Key
-        res_ok = await client.get(
-            "/api/flows", headers={"X-API-Key": "super-secret-admin-token-777"}
-        )
+        res_ok = await client.get("/api/flows", headers={"X-API-Key": "super-secret-admin-token-777"})
         assert res_ok.status_code == 200
 
         # 4. Petición con clave correcta vía Authorization: Bearer
@@ -80,9 +78,7 @@ async def test_auth_secured_mode_blocks_unauthorized_requests(setup_auth_db, mon
         assert res_bearer.status_code == 200
 
         # 5. Petición con query param ?api_key= (útil para SSE / navegador)
-        res_query = await client.get(
-            "/api/flows?api_key=super-secret-admin-token-777"
-        )
+        res_query = await client.get("/api/flows?api_key=super-secret-admin-token-777")
         assert res_query.status_code == 200
 
 

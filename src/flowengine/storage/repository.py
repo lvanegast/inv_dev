@@ -518,6 +518,56 @@ class FlowRepository:
             await db.execute("DELETE FROM idempotency_records WHERE key = ?", (key,))
             await db.commit()
 
+    async def get_polling_watermark(self, flow_id: str, trigger_id: str) -> Any | None:
+        """Recupera el último valor de watermark persistido para un trigger de polling."""
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute(
+                "SELECT watermark_value_json FROM polling_watermarks WHERE flow_id = ? AND trigger_id = ?",
+                (flow_id, trigger_id),
+            ) as cursor,
+        ):
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            try:
+                return json.loads(row["watermark_value_json"])
+            except Exception:
+                return row["watermark_value_json"]
+
+    async def save_polling_watermark(
+        self,
+        flow_id: str,
+        trigger_id: str,
+        watermark_value: Any,
+        watermark_type: str = "numeric",
+    ) -> None:
+        """Guarda o actualiza el cursor/watermark incremental para un trigger de polling."""
+        val_json = json.dumps(watermark_value)
+        async with self.db_manager.get_connection() as db:
+            await db.execute(
+                """
+                INSERT INTO polling_watermarks
+                    (flow_id, trigger_id, watermark_value_json, watermark_type, updated_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(flow_id, trigger_id) DO UPDATE SET
+                    watermark_value_json = excluded.watermark_value_json,
+                    watermark_type = excluded.watermark_type,
+                    updated_at = CURRENT_TIMESTAMP
+                """,
+                (flow_id, trigger_id, val_json, watermark_type),
+            )
+            await db.commit()
+
+    async def reset_polling_watermark(self, flow_id: str, trigger_id: str) -> None:
+        """Elimina el watermark guardado para reiniciar la ingesta desde cero."""
+        async with self.db_manager.get_connection() as db:
+            await db.execute(
+                "DELETE FROM polling_watermarks WHERE flow_id = ? AND trigger_id = ?",
+                (flow_id, trigger_id),
+            )
+            await db.commit()
+
     async def cleanup_expired_idempotency_records(self) -> int:
         """Limpia registros de idempotencia caducados."""
         now_iso = datetime.now(UTC).isoformat()

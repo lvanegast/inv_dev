@@ -111,10 +111,12 @@ Los paquetes externos o módulos locales pueden definir nodos heredando de `Base
 from flowengine.nodes.base import BaseNode
 from flowengine.nodes.registry import register_node
 
+
 class DiscordNotifier(BaseNode):
     async def execute(self, context: dict) -> dict:
         cfg = self.resolve_config(context)
         return {"delivered": True, "message": cfg.get("content")}
+
 
 register_node("action_discord", DiscordNotifier)
 ```

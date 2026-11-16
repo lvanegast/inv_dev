@@ -935,3 +935,140 @@ async def list_scheduled_tasks() -> list[dict[str, Any]]:
         }
         for task in scheduler.tasks.values()
     ]
+
+
+@app.post("/api/flows/{flow_id}/poll")
+async def trigger_flow_polling(flow_id: str) -> dict[str, Any]:
+    """Ejecuta un ciclo de polling incremental a demanda para un flujo con trigger_polling."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Flujo con ID '{flow_id}' no encontrado.",
+        )
+
+    if flow.trigger.type != "trigger_polling":
+        raise HTTPException(
+            status_code=400,
+            detail=f"El flujo '{flow_id}' no tiene configurado un disparador de tipo 'trigger_polling'.",
+        )
+
+    from flowengine.nodes.triggers import PollingTrigger
+
+    polling_node = PollingTrigger(flow.trigger)
+    prev_wm = await repo.get_polling_watermark(flow.id, flow.trigger.id)
+    new_records, new_wm = await polling_node.poll(repo=repo, flow_id=flow.id)
+
+    if not new_records:
+        return {
+            "flow_id": flow.id,
+            "trigger_id": flow.trigger.id,
+            "records_fetched": 0,
+            "previous_watermark": prev_wm,
+            "new_watermark": prev_wm,
+            "dispatched_runs": [],
+            "message": "No se encontraron registros nuevos.",
+        }
+
+    wm_type = flow.trigger.config.get("watermark_type", "numeric")
+    await repo.save_polling_watermark(
+        flow_id=flow.id,
+        trigger_id=flow.trigger.id,
+        watermark_value=new_wm,
+        watermark_type=wm_type,
+    )
+
+    dispatched_run_ids: list[str] = []
+    dispatch_mode = flow.trigger.config.get("dispatch_mode", "batch").lower()
+
+    if dispatch_mode == "single":
+        for idx, record in enumerate(new_records):
+            runner = FlowRunner(flow)
+            payload = {
+                "body": record,
+                "record": record,
+                "record_index": idx,
+                "total_records": len(new_records),
+                "polled_at": datetime.now(UTC).isoformat(),
+                "source": "api_poll",
+            }
+            run_result = await runner.run(trigger_payload=payload)
+            await repo.save_run(run_result)
+            dispatched_run_ids.append(run_result.run_id)
+    else:
+        runner = FlowRunner(flow)
+        payload = {
+            "body": {
+                "records": new_records,
+                "count": len(new_records),
+                "watermark": new_wm,
+            },
+            "records": new_records,
+            "count": len(new_records),
+            "watermark": new_wm,
+            "polled_at": datetime.now(UTC).isoformat(),
+            "source": "api_poll",
+        }
+        run_result = await runner.run(trigger_payload=payload)
+        await repo.save_run(run_result)
+        dispatched_run_ids.append(run_result.run_id)
+
+    return {
+        "flow_id": flow.id,
+        "trigger_id": flow.trigger.id,
+        "records_fetched": len(new_records),
+        "previous_watermark": prev_wm,
+        "new_watermark": new_wm,
+        "dispatched_runs": dispatched_run_ids,
+        "message": f"{len(new_records)} registros procesados exitosamente.",
+    }
+
+
+@app.get("/api/flows/{flow_id}/watermark")
+async def get_flow_watermark(flow_id: str) -> dict[str, Any]:
+    """Obtiene el estado actual del watermark/cursor incremental de un flujo de polling."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Flujo con ID '{flow_id}' no encontrado.",
+        )
+
+    if flow.trigger.type != "trigger_polling":
+        raise HTTPException(
+            status_code=400,
+            detail=f"El flujo '{flow_id}' no tiene configurado un disparador de tipo 'trigger_polling'.",
+        )
+
+    wm = await repo.get_polling_watermark(flow.id, flow.trigger.id)
+    wm_type = flow.trigger.config.get("watermark_type", "numeric")
+    return {
+        "flow_id": flow.id,
+        "trigger_id": flow.trigger.id,
+        "watermark_type": wm_type,
+        "watermark_value": wm,
+    }
+
+
+@app.delete("/api/flows/{flow_id}/watermark")
+async def reset_flow_watermark(flow_id: str) -> dict[str, Any]:
+    """Resetea el cursor de watermark para forzar el reprocesamiento completo desde el inicio."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Flujo con ID '{flow_id}' no encontrado.",
+        )
+
+    if flow.trigger.type != "trigger_polling":
+        raise HTTPException(
+            status_code=400,
+            detail=f"El flujo '{flow_id}' no tiene configurado un disparador de tipo 'trigger_polling'.",
+        )
+
+    await repo.reset_polling_watermark(flow.id, flow.trigger.id)
+    return {
+        "message": "Watermark reseteado exitosamente.",
+        "flow_id": flow.id,
+        "trigger_id": flow.trigger.id,
+    }

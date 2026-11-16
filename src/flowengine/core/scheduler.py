@@ -81,9 +81,13 @@ def compute_next_run(config: dict[str, Any], from_dt: datetime | None = None) ->
     """Calcula la siguiente marca de tiempo en la que debe ejecutarse el flujo."""
     base = from_dt or datetime.now(UTC)
 
-    # 1. Intervalo en segundos
-    if "interval_seconds" in config:
-        secs = max(0.01, float(config["interval_seconds"]))
+    # 1. Intervalo en segundos (soporta interval_seconds y poll_interval_seconds)
+    interval_val = config.get("interval_seconds")
+    if interval_val is None:
+        interval_val = config.get("poll_interval_seconds")
+
+    if interval_val is not None:
+        secs = max(0.01, float(interval_val))
         return base + timedelta(seconds=secs)
 
     # 2. Expresión cron
@@ -124,14 +128,17 @@ class SchedulerService:
         current_ids = set()
 
         for flow in flows:
-            if flow.status == FlowStatus.ACTIVE and flow.trigger.type == "trigger_schedule":
+            if flow.status == FlowStatus.ACTIVE and flow.trigger.type in (
+                "trigger_schedule",
+                "trigger_polling",
+            ):
                 current_ids.add(flow.id)
                 cfg = flow.trigger.config
                 if flow.id not in self.tasks:
                     next_run = compute_next_run(cfg)
                     self.tasks[flow.id] = ScheduledTask(flow=flow, next_run_at=next_run)
                     logger.info(
-                        f"Flujo programado: '{flow.name}' ({flow.id}) -> "
+                        f"Flujo programado/polling: '{flow.name}' ({flow.id}) -> "
                         f"Próxima ejecución: {next_run.isoformat()}"
                     )
                 else:
@@ -181,9 +188,68 @@ class SchedulerService:
                 break
 
     async def _execute_scheduled_flow(self, task: ScheduledTask) -> None:
-        """Ejecuta una corrida del flujo programado y calcula su próxima ejecución."""
+        """Ejecuta una corrida del flujo programado o polling y calcula su próxima ejecución."""
         flow = task.flow
         try:
+            # Caso 1: Disparador de Polling Incremental con Watermark
+            if flow.trigger.type == "trigger_polling":
+                from flowengine.nodes.triggers import PollingTrigger
+
+                polling_node = PollingTrigger(flow.trigger)
+                new_records, new_wm = await polling_node.poll(repo=self.repo, flow_id=flow.id)
+                if not new_records:
+                    logger.debug(
+                        f"Polling '{flow.name}' ({flow.id}): Sin registros nuevos (watermark: {new_wm})."
+                    )
+                    return
+
+                # Actualizar watermark persistido
+                wm_type = flow.trigger.config.get("watermark_type", "numeric")
+                await self.repo.save_polling_watermark(
+                    flow_id=flow.id,
+                    trigger_id=flow.trigger.id,
+                    watermark_value=new_wm,
+                    watermark_type=wm_type,
+                )
+
+                dispatch_mode = flow.trigger.config.get("dispatch_mode", "batch").lower()
+                if dispatch_mode == "single":
+                    for idx, record in enumerate(new_records):
+                        runner = FlowRunner(flow)
+                        payload = {
+                            "body": record,
+                            "record": record,
+                            "record_index": idx,
+                            "total_records": len(new_records),
+                            "polled_at": datetime.now(UTC).isoformat(),
+                            "source": "trigger_polling",
+                        }
+                        run_result = await runner.run(trigger_payload=payload)
+                        await self.repo.save_run(run_result)
+                else:
+                    runner = FlowRunner(flow)
+                    payload = {
+                        "body": {
+                            "records": new_records,
+                            "count": len(new_records),
+                            "watermark": new_wm,
+                        },
+                        "records": new_records,
+                        "count": len(new_records),
+                        "watermark": new_wm,
+                        "polled_at": datetime.now(UTC).isoformat(),
+                        "source": "trigger_polling",
+                    }
+                    run_result = await runner.run(trigger_payload=payload)
+                    await self.repo.save_run(run_result)
+
+                logger.info(
+                    f"Polling '{flow.name}' completado: {len(new_records)} registros nuevos "
+                    f"procesados (nuevo watermark: {new_wm})."
+                )
+                return
+
+            # Caso 2: Disparador Programado Clásico (Cron / Interval)
             logger.info(f"Disparando flujo programado: '{flow.name}' ({flow.id})")
             runner = FlowRunner(flow)
             payload = {

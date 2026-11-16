@@ -65,7 +65,7 @@ def test_metrics_registry_prometheus_output() -> None:
 
     prom_text = registry.generate_prometheus_text()
     assert "# HELP flowengine_flow_runs_total" in prom_text
-    assert '# TYPE flowengine_flow_runs_total counter' in prom_text
+    assert "# TYPE flowengine_flow_runs_total counter" in prom_text
     assert 'flowengine_flow_runs_total{flow_id="order-flow",status="success"} 1' in prom_text
     assert 'flowengine_flow_runs_total{flow_id="order-flow",status="failed"} 1' in prom_text
     assert 'flowengine_active_runs{flow_id="order-flow"} 1' in prom_text

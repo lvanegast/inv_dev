@@ -74,6 +74,15 @@ CREATE TABLE IF NOT EXISTS idempotency_records (
 
 CREATE INDEX IF NOT EXISTS idx_idempotency_flow_id ON idempotency_records(flow_id);
 CREATE INDEX IF NOT EXISTS idx_idempotency_expires_at ON idempotency_records(expires_at);
+
+CREATE TABLE IF NOT EXISTS polling_watermarks (
+    flow_id TEXT NOT NULL,
+    trigger_id TEXT NOT NULL,
+    watermark_value_json TEXT NOT NULL,
+    watermark_type TEXT DEFAULT 'numeric',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY(flow_id, trigger_id)
+);
 """
 
 

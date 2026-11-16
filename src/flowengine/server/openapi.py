@@ -89,13 +89,15 @@ def generate_flow_openapi(flow: FlowDefinition, server_url: str = "") -> dict[st
             "description": desc,
         }
         security_requirements.append({"HmacSignatureAuth": []})
-        parameters.append({
-            "name": header_name,
-            "in": "header",
-            "required": True,
-            "schema": {"type": "string"},
-            "description": "Firma HMAC para validar la autenticidad del payload",
-        })
+        parameters.append(
+            {
+                "name": header_name,
+                "in": "header",
+                "required": True,
+                "schema": {"type": "string"},
+                "description": "Firma HMAC para validar la autenticidad del payload",
+            }
+        )
     elif auth_type == "bearer":
         components["securitySchemes"]["BearerAuth"] = {
             "type": "http",
@@ -210,4 +212,3 @@ def get_scalar_ui_html(openapi_url: str, title: str = "FlowEngine API Reference"
     <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
   </body>
 </html>"""
-

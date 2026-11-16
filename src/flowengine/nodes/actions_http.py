@@ -53,6 +53,7 @@ class HttpRequestAction(BaseNode):
                 conn_data = context["__connections__"][conn_id]
             else:
                 from flowengine.storage.repository import FlowRepository
+
                 repo = FlowRepository()
                 conn_def = await repo.get_connection(conn_id, decrypt=True)
                 if conn_def:

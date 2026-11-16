@@ -120,11 +120,7 @@ class DAGGraph:
 
     def get_error_fallback_nodes(self, node_id: str) -> list[str]:
         """Devuelve los IDs de nodos destino conectados con on_error=True desde node_id."""
-        return [
-            edge.target
-            for edge in self.outgoing_edges.get(node_id, [])
-            if edge.on_error
-        ]
+        return [edge.target for edge in self.outgoing_edges.get(node_id, []) if edge.on_error]
 
     def find_loop_block(self, iterator_id: str) -> tuple[list[str], str | None]:
         """Encuentra los nodos que pertenecen al bucle entre un Iterator y su Aggregator.
