@@ -37,6 +37,37 @@ class ConnectionType(StrEnum):
     CUSTOM = "custom"
 
 
+class JobStatus(StrEnum):
+    QUEUED = "queued"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class JobPriority(StrEnum):
+    CRITICAL = "critical"
+    HIGH = "high"
+    NORMAL = "normal"
+    LOW = "low"
+
+
+class QueueJob(BaseModel):
+    """Representa una tarea o ejecución encolada para procesamiento asíncrono en segundo plano."""
+
+    job_id: str = Field(default_factory=lambda: str(uuid4()), description="ID único del trabajo")
+    flow_id: str = Field(description="ID del flujo asociado")
+    run_id: str = Field(default_factory=lambda: str(uuid4()), description="ID de corrida reservado")
+    status: JobStatus = Field(default=JobStatus.QUEUED, description="Estado del trabajo en la cola")
+    priority: JobPriority = Field(default=JobPriority.NORMAL, description="Nivel de prioridad")
+    payload: dict[str, Any] = Field(default_factory=dict, description="Datos de entrada del trabajo")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    error: str | None = None
+    result: dict[str, Any] | None = None
+
+
 class AlertChannel(StrEnum):
     WEBHOOK = "webhook"
     SLACK = "slack"
@@ -141,6 +172,10 @@ class FlowDefinition(BaseModel):
     idempotency: IdempotencyConfig | None = Field(
         default=None,
         description="Configuración de idempotencia y deduplicación de webhooks",
+    )
+    async_execution: bool = Field(
+        default=False,
+        description="Si es True, encola webhooks y peticiones de forma asíncrona devolviendo HTTP 202",
     )
 
     def get_node(self, node_id: str) -> NodeDefinition | None:

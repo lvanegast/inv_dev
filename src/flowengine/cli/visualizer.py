@@ -276,3 +276,61 @@ def print_flow_versions_table(flow_id: str, versions: list[dict[str, Any]]) -> N
         )
 
     console.print(table)
+
+
+def print_jobs_table(jobs: list[dict[str, Any]]) -> None:
+    """Muestra la tabla de trabajos encolados y en segundo plano."""
+    table = Table(
+        title="Cola de Trabajos Asíncronos (Execution Jobs)",
+        show_lines=True,
+        header_style="bold cyan",
+    )
+    table.add_column("Job ID", style="bold yellow")
+    table.add_column("Flow ID", style="bold white")
+    table.add_column("Estado", justify="center")
+    table.add_column("Prioridad", justify="center")
+    table.add_column("Creado", justify="center")
+    table.add_column("Completado", justify="center")
+
+    status_styles = {
+        "queued": "[bold yellow]QUEUED[/bold yellow]",
+        "processing": "[bold cyan]PROCESSING[/bold cyan]",
+        "completed": "[bold green]COMPLETED[/bold green]",
+        "failed": "[bold red]FAILED[/bold red]",
+        "cancelled": "[dim]CANCELLED[/dim]",
+    }
+
+    for j in jobs:
+        st = j.get("status", "queued")
+        st_badge = status_styles.get(st, st)
+        table.add_row(
+            j["job_id"][:12] + "...",
+            j["flow_id"],
+            st_badge,
+            j.get("priority", "normal").upper(),
+            str(j.get("created_at", ""))[:19],
+            str(j.get("completed_at", "") or "-")[:19],
+        )
+
+    console.print(table)
+
+
+def print_queue_stats(stats: dict[str, Any]) -> None:
+    """Muestra métricas del pool de workers y cola."""
+    db = stats.get("database", {})
+    pool = stats.get("pool", {})
+
+    table = Table(title="Estado del Worker Pool y Colas", header_style="bold green")
+    table.add_column("Métrica", style="bold white")
+    table.add_column("Valor", style="bold cyan")
+
+    table.add_row("Workers Configurados", str(pool.get("workers_configured", 0)))
+    table.add_row("Workers Activos en Ejecución", str(pool.get("active_workers", 0)))
+    table.add_row("Profundidad de Cola en Memoria", str(pool.get("queue_depth", 0)))
+    table.add_row("Trabajos en Cola (DB)", str(db.get("queued", 0)))
+    table.add_row("Trabajos en Procesamiento (DB)", str(db.get("processing", 0)))
+    table.add_row("Trabajos Completados Exitosos", str(db.get("completed", 0)))
+    table.add_row("Trabajos Fallidos", str(db.get("failed", 0)))
+    table.add_row("Trabajos Cancelados", str(db.get("cancelled", 0)))
+
+    console.print(table)

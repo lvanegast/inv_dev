@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from flowengine.core.dag import DAGGraph, DAGValidationError
 from flowengine.core.models import ConnectionDefinition, FlowDefinition, FlowStatus
+from flowengine.core.queue import WorkerPool
 from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.core.scheduler import SchedulerService
 from flowengine.core.security import verify_webhook_auth
@@ -31,9 +32,10 @@ from flowengine.server.openapi import generate_flow_openapi, get_scalar_ui_html
 from flowengine.server.streaming import execution_broker, format_sse
 from flowengine.storage.repository import FlowRepository
 
-# Repositorio y Scheduler globales del servidor
+# Repositorio, Scheduler y WorkerPool globales del servidor
 repo = FlowRepository()
 scheduler = SchedulerService(repo)
+worker_pool = WorkerPool(repo=repo, num_workers=int(os.getenv("FLOWENGINE_WORKERS", "4")))
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 MAX_WEBHOOK_PAYLOAD_BYTES = int(os.getenv("FLOWENGINE_MAX_BODY_BYTES", 10 * 1024 * 1024))
@@ -45,9 +47,13 @@ async def lifespan(app: FastAPI):
     await repo.initialize()
     if os.getenv("FLOWENGINE_ENABLE_SCHEDULER", "false").lower() in ("true", "1", "yes"):
         await scheduler.start()
+    if os.getenv("FLOWENGINE_ENABLE_WORKERS", "true").lower() in ("true", "1", "yes"):
+        await worker_pool.start()
     yield
     if scheduler._running:
         await scheduler.stop()
+    if worker_pool.is_running:
+        await worker_pool.stop()
     await close_shared_http_client()
 
 
@@ -441,6 +447,36 @@ async def receive_webhook(flow_id: str, request: Request) -> dict[str, Any]:
 
     trace_ctx = TraceContext.from_traceparent(request.headers.get("traceparent"))
 
+    # Determinar si la ejecución debe ser encolada de forma asíncrona
+    is_async = (
+        flow.async_execution
+        or query_params.get("async", "").lower() in ("true", "1")
+        or headers.get("x-execution-mode", "").lower() == "async"
+    )
+
+    if is_async:
+        job = await worker_pool.enqueue(
+            flow=flow,
+            payload=trigger_payload,
+            trace_context=trace_ctx,
+            idempotency_key=idempotency_key,
+        )
+        return JSONResponse(
+            content={
+                "message": "Flujo encolado exitosamente para ejecución asíncrona.",
+                "job_id": job.job_id,
+                "run_id": job.run_id,
+                "flow_id": flow_id,
+                "status": job.status.value,
+                "poll_url": f"/api/jobs/{job.job_id}",
+            },
+            status_code=202,
+            headers={
+                "Location": f"/api/jobs/{job.job_id}",
+                "Idempotent-Replay": "false",
+            },
+        )
+
     async def on_event(evt: dict[str, Any]) -> None:
         run_id = evt.get("run_id")
         if run_id:
@@ -739,6 +775,28 @@ async def run_flow_endpoint(
     }
 
     trace_ctx = TraceContext.from_traceparent(request.headers.get("traceparent"))
+
+    if not stream and (
+        request.query_params.get("async", "").lower() in ("true", "1")
+        or request.headers.get("x-execution-mode", "").lower() == "async"
+    ):
+        job = await worker_pool.enqueue(
+            flow=flow,
+            payload=trigger_payload,
+            trace_context=trace_ctx,
+        )
+        return JSONResponse(
+            content={
+                "message": "Flujo encolado para ejecución asíncrona.",
+                "job_id": job.job_id,
+                "run_id": job.run_id,
+                "flow_id": flow_id,
+                "status": job.status.value,
+                "poll_url": f"/api/jobs/{job.job_id}",
+            },
+            status_code=202,
+            headers={"Location": f"/api/jobs/{job.job_id}"},
+        )
 
     if stream:
 
@@ -1072,3 +1130,48 @@ async def reset_flow_watermark(flow_id: str) -> dict[str, Any]:
         "flow_id": flow.id,
         "trigger_id": flow.trigger.id,
     }
+
+
+@app.get("/api/queue/stats")
+async def get_queue_statistics() -> dict[str, Any]:
+    """Obtiene métricas operativas en tiempo real de la cola y pool de trabajadores."""
+    pool_stats = worker_pool.get_stats()
+    db_stats = await repo.get_queue_stats()
+    return {
+        "pool": pool_stats,
+        "database": db_stats,
+    }
+
+
+@app.get("/api/jobs")
+async def list_queued_jobs(
+    flow_id: str | None = None,
+    status: str | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    """Lista los trabajos recientes procesados o esperando en cola."""
+    return await repo.list_jobs(flow_id=flow_id, status=status, limit=limit)
+
+
+@app.get("/api/jobs/{job_id}")
+async def get_job_detail(job_id: str) -> dict[str, Any]:
+    """Consulta el detalle, estado actual y resultados de un trabajo asíncrono."""
+    job = await repo.get_job(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Trabajo con ID '{job_id}' no encontrado en la cola.",
+        )
+    return job
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+async def cancel_queued_job(job_id: str) -> dict[str, Any]:
+    """Cancela un trabajo pendiente o en procesamiento."""
+    cancelled = await worker_pool.cancel(job_id)
+    if not cancelled:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se pudo cancelar el trabajo '{job_id}' (puede haber finalizado ya o no existir).",
+        )
+    return {"message": f"Trabajo '{job_id}' cancelado exitosamente.", "job_id": job_id}

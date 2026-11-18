@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import typer
@@ -15,6 +16,8 @@ from flowengine.cli.visualizer import (
     print_dlq_runs,
     print_flow_tree,
     print_flow_versions_table,
+    print_jobs_table,
+    print_queue_stats,
     print_run_result,
     print_runs_history,
     print_test_suite_results,
@@ -188,6 +191,10 @@ def serve(
     with_scheduler: bool = typer.Option(
         False, "--with-scheduler", help="Iniciar también el planificador en segundo plano (Cron/Interval)"
     ),
+    with_workers: bool = typer.Option(
+        True, "--with-workers/--no-workers", help="Iniciar pool de workers asíncronos para tareas en cola"
+    ),
+    workers: int = typer.Option(4, "--workers", "-w", help="Número de workers concurrentes"),
     api_key: str | None = typer.Option(
         None, "--api-key", "-k", help="Clave API maestra para proteger la API y el Dashboard"
     ),
@@ -198,6 +205,13 @@ def serve(
     if with_scheduler:
         os.environ["FLOWENGINE_ENABLE_SCHEDULER"] = "true"
         console.print("[bold yellow]⏰ Scheduler en segundo plano habilitado.[/bold yellow]")
+
+    if with_workers:
+        os.environ["FLOWENGINE_ENABLE_WORKERS"] = "true"
+        os.environ["FLOWENGINE_WORKERS"] = str(workers)
+        console.print(f"[bold green]👷 Worker Pool habilitado ({workers} workers concurrentes).[/bold green]")
+    else:
+        os.environ["FLOWENGINE_ENABLE_WORKERS"] = "false"
 
     if api_key:
         os.environ["FLOWENGINE_API_KEY"] = api_key
@@ -479,6 +493,78 @@ def connection_delete(
         console.print(f"[bold green][OK] Conexión '{connection_id}' eliminada del Vault.[/bold green]")
     else:
         console.print(f"[bold red][ERROR] Conexión '{connection_id}' no encontrada.[/bold red]")
+        raise typer.Exit(code=1)
+
+
+queue_app = typer.Typer(
+    name="queue",
+    help="Gestión de la cola asíncrona y pool de trabajadores (Worker Pool)",
+    add_completion=False,
+)
+app.add_typer(queue_app, name="queue")
+
+
+@queue_app.command(name="stats")
+def queue_stats_cmd() -> None:
+    """Muestra estadísticas en tiempo real del estado de la cola y de los workers."""
+    repo = FlowRepository()
+
+    async def _stats():
+        await repo.initialize()
+        db_stats = await repo.get_queue_stats()
+        return {"database": db_stats, "pool": {"workers_configured": "N/A (CLI)"}}
+
+    stats = asyncio.run(_stats())
+    print_queue_stats(stats)
+
+
+@queue_app.command(name="list")
+def queue_list_cmd(
+    flow_id: str | None = typer.Option(None, "--flow-id", "-f", help="Filtrar por ID de flujo"),
+    status: str | None = typer.Option(None, "--status", "-s", help="Filtrar por estado (queued, processing)"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Número máximo de trabajos"),
+) -> None:
+    """Lista los trabajos registrados en la cola de ejecución."""
+    repo = FlowRepository()
+
+    async def _list():
+        await repo.initialize()
+        return await repo.list_jobs(flow_id=flow_id, status=status, limit=limit)
+
+    jobs = asyncio.run(_list())
+    if not jobs:
+        console.print("[yellow]No hay trabajos registrados en la cola.[/yellow]")
+        return
+    print_jobs_table(jobs)
+
+
+@queue_app.command(name="cancel")
+def queue_cancel_cmd(
+    job_id: str = typer.Argument(..., help="ID del trabajo a cancelar"),
+) -> None:
+    """Cancela un trabajo en cola o en ejecución."""
+    from flowengine.core.models import JobStatus
+
+    repo = FlowRepository()
+
+    async def _cancel():
+        await repo.initialize()
+        job = await repo.get_job(job_id)
+        if not job:
+            return False
+        await repo.update_job(
+            job_id,
+            status=JobStatus.CANCELLED,
+            completed_at=datetime.now(UTC),
+            error="Cancelado manualmente vía CLI",
+        )
+        return True
+
+    cancelled = asyncio.run(_cancel())
+    if cancelled:
+        console.print(f"[bold green][OK] Trabajo '{job_id}' marcado como CANCELADO.[/bold green]")
+    else:
+        console.print(f"[bold red][ERROR] Trabajo '{job_id}' no encontrado.[/bold red]")
         raise typer.Exit(code=1)
 
 

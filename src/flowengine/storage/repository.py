@@ -10,6 +10,8 @@ from flowengine.core.models import (
     ExecutionRun,
     FlowDefinition,
     FlowStatus,
+    JobStatus,
+    QueueJob,
 )
 from flowengine.core.vault import decrypt_data, encrypt_data
 from flowengine.storage.db import DatabaseManager
@@ -578,3 +580,171 @@ class FlowRepository:
             )
             await db.commit()
             return cursor.rowcount
+
+    async def create_job(self, job: QueueJob) -> None:
+        """Registra un nuevo trabajo encolado en la tabla de ejecución."""
+        payload_json = json.dumps(job.payload, ensure_ascii=False)
+        created_iso = job.created_at.isoformat()
+        async with self.db_manager.get_connection() as db:
+            await db.execute(
+                """
+                INSERT INTO execution_jobs
+                    (job_id, flow_id, run_id, status, priority, payload_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    job.job_id,
+                    job.flow_id,
+                    job.run_id,
+                    job.status.value,
+                    job.priority.value,
+                    payload_json,
+                    created_iso,
+                ),
+            )
+            await db.commit()
+
+    async def get_job(self, job_id: str) -> dict[str, Any] | None:
+        """Recupera los detalles de un trabajo encolado."""
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute("SELECT * FROM execution_jobs WHERE job_id = ?", (job_id,)) as cursor,
+        ):
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            data = dict(row)
+            try:
+                data["payload"] = json.loads(data.pop("payload_json"))
+            except Exception:
+                data["payload"] = {}
+            if data.get("result_json"):
+                try:
+                    data["result"] = json.loads(data.pop("result_json"))
+                except Exception:
+                    data["result"] = None
+            else:
+                data.pop("result_json", None)
+                data["result"] = None
+            return data
+
+    async def update_job(
+        self,
+        job_id: str,
+        status: JobStatus | None = None,
+        started_at: datetime | None = None,
+        completed_at: datetime | None = None,
+        error: str | None = None,
+        result: dict[str, Any] | None = None,
+    ) -> None:
+        """Actualiza el estado y resultados de un trabajo en la cola."""
+        updates: list[str] = []
+        params: list[Any] = []
+
+        if status is not None:
+            updates.append("status = ?")
+            params.append(status.value if isinstance(status, JobStatus) else str(status))
+        if started_at is not None:
+            updates.append("started_at = ?")
+            params.append(started_at.isoformat())
+        if completed_at is not None:
+            updates.append("completed_at = ?")
+            params.append(completed_at.isoformat())
+        if error is not None:
+            updates.append("error = ?")
+            params.append(error)
+        if result is not None:
+            updates.append("result_json = ?")
+            params.append(json.dumps(result, ensure_ascii=False))
+
+        if not updates:
+            return
+
+        params.append(job_id)
+        sql = f"UPDATE execution_jobs SET {', '.join(updates)} WHERE job_id = ?"
+        async with self.db_manager.get_connection() as db:
+            await db.execute(sql, tuple(params))
+            await db.commit()
+
+    async def list_jobs(
+        self,
+        flow_id: str | None = None,
+        status: str | None = None,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        """Lista los trabajos recientes en la cola con filtros opcionales."""
+        query = "SELECT * FROM execution_jobs"
+        conditions: list[str] = []
+        params: list[Any] = []
+
+        if flow_id:
+            conditions.append("flow_id = ?")
+            params.append(flow_id)
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+
+        if conditions:
+            query += f" WHERE {' AND '.join(conditions)}"
+
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(limit)
+
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute(query, tuple(params)) as cursor,
+        ):
+            rows = await cursor.fetchall()
+            results: list[dict[str, Any]] = []
+            for r in rows:
+                item = dict(r)
+                try:
+                    item["payload"] = json.loads(item.pop("payload_json"))
+                except Exception:
+                    item["payload"] = {}
+                if item.get("result_json"):
+                    try:
+                        item["result"] = json.loads(item.pop("result_json"))
+                    except Exception:
+                        item["result"] = None
+                else:
+                    item.pop("result_json", None)
+                    item["result"] = None
+                results.append(item)
+            return results
+
+    async def get_queue_stats(self) -> dict[str, Any]:
+        """Calcula estadísticas consolidadas del estado de la cola en SQLite."""
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute(
+                """
+                SELECT
+                    COUNT(*) as total_jobs,
+                    SUM(CASE WHEN status = 'queued' THEN 1 ELSE 0 END) as queued_count,
+                    SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) as processing_count,
+                    SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_count,
+                    SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_count,
+                    SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count
+                FROM execution_jobs
+                """
+            ) as cursor,
+        ):
+            row = await cursor.fetchone()
+            if not row:
+                return {
+                    "total_jobs": 0,
+                    "queued": 0,
+                    "processing": 0,
+                    "completed": 0,
+                    "failed": 0,
+                    "cancelled": 0,
+                }
+            return {
+                "total_jobs": row["total_jobs"] or 0,
+                "queued": row["queued_count"] or 0,
+                "processing": row["processing_count"] or 0,
+                "completed": row["completed_count"] or 0,
+                "failed": row["failed_count"] or 0,
+                "cancelled": row["cancelled_count"] or 0,
+            }

@@ -1,0 +1,74 @@
+id: async-heavy-pipeline
+name: "Pipeline Pesado con Procesamiento Desacoplado en Worker Pool"
+description: "Demuestra la ejecución asíncrona no bloqueante (HTTP 202 Accepted) para procesamiento masivo de datos sin riesgo de timeout gateway. El pool de workers en segundo plano toma la tarea con control de prioridad, transforma registros con Data Mapper y despacha alertas."
+status: active
+async_execution: true
+
+trigger:
+  id: webhook_ingesta
+  name: "Webhook: Ingesta de Lote Masivo"
+  type: trigger_webhook
+  config:
+    example_payload:
+      batch_id: "BATCH-2026-X99"
+      priority: "high"
+      records:
+        - sku: "SRV-ENTERPRISE-01"
+          cost: "12500.00"
+          status: "A"
+        - sku: "LIC-CLOUD-ORACLE"
+          cost: "4500.00"
+          status: "P"
+
+nodes:
+  # 1. Transformación masiva de los registros con Data Mapper
+  - id: transformar_lote
+    name: "Data Mapper: Normalizar y Convertir Costos"
+    type: action_mapper
+    config:
+      data: "{{trigger.body.records}}"
+      cast:
+        cost: "float"
+        sku: "strip"
+      lookup:
+        field: "status"
+        target_field: "estado_label"
+        table:
+          "A": "Aprobado para Pago"
+          "P": "Pendiente de Auditoría"
+        default: "En Revisión"
+
+  # 2. Resumen consolidado del procesamiento
+  - id: consolidar_totales
+    name: "Código: Totalizar Presupuesto del Lote"
+    type: action_code
+    config:
+      code: |
+        items = input.get("transformar_lote", {}).get("items", [])
+        total = sum(float(i.get("cost", 0.0)) for i in items)
+        output = {
+            "lote_id": input.get("trigger", {}).get("body", {}).get("batch_id", "DESCONOCIDO"),
+            "num_items": len(items),
+            "gran_total": round(total, 2),
+            "items_procesados": items
+        }
+
+  # 3. Notificación ejecutiva por mensajería instantánea
+  - id: notificar_finalizacion
+    name: "Notificación: Reportar Lote Finalizado"
+    type: action_notify
+    config:
+      channel: "slack"
+      webhook_url: "https://hooks.slack.com/services/MOCK/ASYNC/BATCH"
+      title: "Lote Asíncrono Finalizado con Éxito"
+      message: "El lote {{consolidar_totales.lote_id}} completó su ejecución en segundo plano. Total acumulado: ${{consolidar_totales.gran_total}} USD ({{consolidar_totales.num_items}} registros)."
+      color: "#10b981"
+      mock_delivery: true
+
+edges:
+  - source: webhook_ingesta
+    target: transformar_lote
+  - source: transformar_lote
+    target: consolidar_totales
+  - source: consolidar_totales
+    target: notificar_finalizacion

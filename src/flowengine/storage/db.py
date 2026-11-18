@@ -83,6 +83,25 @@ CREATE TABLE IF NOT EXISTS polling_watermarks (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY(flow_id, trigger_id)
 );
+
+CREATE TABLE IF NOT EXISTS execution_jobs (
+    job_id TEXT PRIMARY KEY,
+    flow_id TEXT NOT NULL,
+    run_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    priority TEXT DEFAULT 'normal',
+    payload_json TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    error TEXT,
+    result_json TEXT,
+    FOREIGN KEY(flow_id) REFERENCES flows(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON execution_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_flow_id ON execution_jobs(flow_id);
+CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON execution_jobs(created_at DESC);
 """
 
 
