@@ -20,10 +20,16 @@ from flowengine.cli.visualizer import (
     print_queue_stats,
     print_run_result,
     print_runs_history,
+    print_subscriptions_table,
     print_test_suite_results,
 )
 from flowengine.core.dag import DAGGraph, DAGValidationError
-from flowengine.core.models import ConnectionDefinition, ConnectionType, FlowDefinition
+from flowengine.core.models import (
+    ConnectionDefinition,
+    ConnectionType,
+    FlowDefinition,
+    WebhookSubscription,
+)
 from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.core.testing import (
     FlowTestCase,
@@ -565,6 +571,72 @@ def queue_cancel_cmd(
         console.print(f"[bold green][OK] Trabajo '{job_id}' marcado como CANCELADO.[/bold green]")
     else:
         console.print(f"[bold red][ERROR] Trabajo '{job_id}' no encontrado.[/bold red]")
+        raise typer.Exit(code=1)
+
+
+subscription_app = typer.Typer(
+    name="subscription",
+    help="Gestión de suscripciones externas a webhooks salientes (CDC / Fan-Out)",
+    add_completion=False,
+)
+app.add_typer(subscription_app, name="subscription")
+
+
+@subscription_app.command(name="add")
+def subscription_add_cmd(
+    target_url: str = typer.Argument(..., help="URL HTTPS de destino que recibirá los webhooks"),
+    topic: str = typer.Option("*", "--topic", "-t", help="Tema del evento (ej. 'order.*', 'lead.created')"),
+    secret: str | None = typer.Option(None, "--secret", "-s", help="Secreto para firma criptográfica HMAC"),
+) -> None:
+    """Registra una nueva suscripción externa a eventos de webhook."""
+    sub = WebhookSubscription(topic=topic, target_url=target_url, secret=secret)
+    repo = FlowRepository()
+
+    async def _add():
+        await repo.initialize()
+        await repo.create_subscription(sub)
+
+    asyncio.run(_add())
+    console.print(
+        f"[bold green][OK] Suscripción '{sub.id}' registrada exitosamente "
+        f"para el tema '{topic}'.[/bold green]"
+    )
+
+
+@subscription_app.command(name="list")
+def subscription_list_cmd(
+    topic: str | None = typer.Option(None, "--topic", "-t", help="Filtrar por tema o patrón comodín"),
+) -> None:
+    """Lista las suscripciones registradas a eventos de webhook."""
+    repo = FlowRepository()
+
+    async def _list():
+        await repo.initialize()
+        return await repo.list_subscriptions(topic=topic)
+
+    subs = asyncio.run(_list())
+    if not subs:
+        console.print("[yellow]No hay suscripciones registradas.[/yellow]")
+        return
+    print_subscriptions_table(subs)
+
+
+@subscription_app.command(name="delete")
+def subscription_delete_cmd(
+    subscription_id: str = typer.Argument(..., help="ID de la suscripción a eliminar"),
+) -> None:
+    """Elimina una suscripción externa."""
+    repo = FlowRepository()
+
+    async def _del():
+        await repo.initialize()
+        return await repo.delete_subscription(subscription_id)
+
+    deleted = asyncio.run(_del())
+    if deleted:
+        console.print(f"[bold green][OK] Suscripción '{subscription_id}' eliminada.[/bold green]")
+    else:
+        console.print(f"[bold red][ERROR] Suscripción '{subscription_id}' no encontrada.[/bold red]")
         raise typer.Exit(code=1)
 
 

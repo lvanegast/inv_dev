@@ -1,6 +1,7 @@
 """Nodos de FlowEngine."""
 
 from flowengine.nodes.actions_batch import AggregatorNode, IteratorNode
+from flowengine.nodes.actions_broadcast import WebhookBroadcastAction
 from flowengine.nodes.actions_browser import BrowserAction
 from flowengine.nodes.actions_email import EmailAction
 from flowengine.nodes.actions_im import IMAction
@@ -35,6 +36,7 @@ __all__ = [
     "SqlAction",
     "SubflowAction",
     "TabularAction",
+    "WebhookBroadcastAction",
     "BUILTIN_NODES",
     "NODE_REGISTRY",
     "create_node_instance",

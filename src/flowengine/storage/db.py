@@ -102,6 +102,20 @@ CREATE TABLE IF NOT EXISTS execution_jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON execution_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_flow_id ON execution_jobs(flow_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_created_at ON execution_jobs(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS webhook_subscriptions (
+    id TEXT PRIMARY KEY,
+    topic TEXT NOT NULL,
+    target_url TEXT NOT NULL,
+    secret TEXT,
+    headers_json TEXT,
+    status TEXT DEFAULT 'active',
+    failure_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_subs_topic ON webhook_subscriptions(topic);
+CREATE INDEX IF NOT EXISTS idx_subs_status ON webhook_subscriptions(status);
 """
 
 

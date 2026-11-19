@@ -68,6 +68,33 @@ class QueueJob(BaseModel):
     result: dict[str, Any] | None = None
 
 
+class SubscriptionStatus(StrEnum):
+    ACTIVE = "active"
+    PAUSED = "paused"
+
+
+class WebhookSubscription(BaseModel):
+    """Representa una suscripción externa para recibir eventos y webhooks salientes (CDC/Fan-out)."""
+
+    id: str = Field(default_factory=lambda: str(uuid4()), description="ID único de suscripción")
+    topic: str = Field(
+        default="*",
+        description="Tema o patrón de evento al que se suscribe (ej. 'order.created', 'crm.*' o '*')",
+    )
+    target_url: str = Field(description="URL HTTPS de destino que recibirá las notificaciones POST")
+    secret: str | None = Field(
+        default=None,
+        description="Clave secreta opcional para generar firma criptográfica HMAC-SHA256",
+    )
+    custom_headers: dict[str, str] = Field(
+        default_factory=dict,
+        description="Cabeceras HTTP personalizadas adicionales a inyectar",
+    )
+    status: SubscriptionStatus = Field(default=SubscriptionStatus.ACTIVE)
+    failure_count: int = Field(default=0, ge=0)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+
+
 class AlertChannel(StrEnum):
     WEBHOOK = "webhook"
     SLACK = "slack"

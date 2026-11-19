@@ -334,3 +334,32 @@ def print_queue_stats(stats: dict[str, Any]) -> None:
     table.add_row("Trabajos Cancelados", str(db.get("cancelled", 0)))
 
     console.print(table)
+
+
+def print_subscriptions_table(subs: list[dict[str, Any]]) -> None:
+    """Muestra la tabla de suscripciones activas a eventos de webhook (Fan-Out)."""
+    table = Table(
+        title="Suscripciones de Webhooks Salientes (CDC / Fan-Out)",
+        show_lines=True,
+        header_style="bold magenta",
+    )
+    table.add_column("Subscription ID", style="bold yellow")
+    table.add_column("Tema (Topic)", style="bold cyan")
+    table.add_column("URL Destino", style="bold white")
+    table.add_column("Firma HMAC", justify="center")
+    table.add_column("Estado", justify="center")
+    table.add_column("Fallos", justify="center")
+
+    for s in subs:
+        has_secret = "[bold green]Sí (HMAC-SHA256)[/bold green]" if s.get("secret") else "[dim]No[/dim]"
+        st = "[bold green]ACTIVO[/bold green]" if s.get("status") == "active" else "[dim]PAUSADO[/dim]"
+        table.add_row(
+            s["id"][:12] + "...",
+            s.get("topic", "*"),
+            s.get("target_url", ""),
+            has_secret,
+            st,
+            str(s.get("failure_count", 0)),
+        )
+
+    console.print(table)

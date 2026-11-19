@@ -1,0 +1,72 @@
+id: webhook-event-broadcaster
+name: "Orquestador de Eventos CDC y Retransmisión Fan-Out de Webhooks"
+description: "Ingesta eventos transaccionales, normaliza la carga útil con Data Mapper y retransmite concurrentemente en abanico (Fan-Out) a múltiples plataformas externas (ERP, Facturación, Analytics) con firmas criptográficas individuales HMAC-SHA256."
+status: active
+
+trigger:
+  id: webhook_evento
+  name: "Webhook: Ingesta de Evento de Compra"
+  type: trigger_webhook
+  config:
+    example_payload:
+      order_id: "ORD-998811"
+      customer_email: "compras@cliente-corporativo.com"
+      amount_usd: "3500.00"
+      payment_method: "WIRE_TRANSFER"
+      currency: "USD"
+
+nodes:
+  # 1. Normalización y enriquecimiento del evento con Data Mapper
+  - id: normalizar_evento
+    name: "Data Mapper: Estructurar Evento Transaccional"
+    type: action_mapper
+    config:
+      data: "{{trigger.body}}"
+      rename:
+        order_id: "orden_id"
+        amount_usd: "monto"
+        payment_method: "metodo_pago"
+      cast:
+        monto: "float"
+      defaults:
+        canal: "PORTAL_B2B"
+        origen: "FlowEngine-CDC"
+
+  # 2. Retransmisión concurrente Fan-Out a suscriptores con firmas criptográficas
+  - id: difundir_evento
+    name: "Fan-Out: Retransmisión Multidestino con Firma HMAC-SHA256"
+    type: action_webhook_broadcast
+    config:
+      topic: "order.paid"
+      payload: "{{normalizar_evento.result}}"
+      subscribers:
+        - url: "https://erp.partner-logistica.com/webhooks/orders"
+          secret: "partner_logistica_secret_key_889"
+          headers:
+            X-Partner-Id: "LOGISTICA-01"
+        - url: "https://analytics.bi-cloud.com/ingest/events"
+          secret: "analytics_bi_shared_secret_442"
+          headers:
+            X-Environment: "production"
+      use_db_subscriptions: true
+      timeout_seconds: 5.0
+
+  # 3. Notificación ejecutiva con telemetría del despacho
+  - id: notificar_difusion
+    name: "Notificación: Reportar Entrega Fan-Out"
+    type: action_notify
+    config:
+      channel: "slack"
+      webhook_url: "https://hooks.slack.com/services/MOCK/FANOUT/METRICS"
+      title: "Evento 'order.paid' Difundido Exitosamente"
+      message: "Se completó la retransmisión Fan-Out para la orden {{normalizar_evento.orden_id}}. Entregados: {{difundir_evento.delivered_count}}/{{difundir_evento.total_subscribers}} suscriptores."
+      color: "#10b981"
+      mock_delivery: true
+
+edges:
+  - source: webhook_evento
+    target: normalizar_evento
+  - source: normalizar_evento
+    target: difundir_evento
+  - source: difundir_evento
+    target: notificar_difusion

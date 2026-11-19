@@ -12,6 +12,7 @@ from flowengine.core.models import (
     FlowStatus,
     JobStatus,
     QueueJob,
+    WebhookSubscription,
 )
 from flowengine.core.vault import decrypt_data, encrypt_data
 from flowengine.storage.db import DatabaseManager
@@ -748,3 +749,113 @@ class FlowRepository:
                 "failed": row["failed_count"] or 0,
                 "cancelled": row["cancelled_count"] or 0,
             }
+
+    async def create_subscription(self, subscription: WebhookSubscription) -> None:
+        """Registra una nueva suscripción externa para webhooks salientes (CDC/Fan-Out)."""
+        headers_json = json.dumps(subscription.custom_headers, ensure_ascii=False)
+        created_iso = subscription.created_at.isoformat()
+        async with self.db_manager.get_connection() as db:
+            await db.execute(
+                """
+                INSERT INTO webhook_subscriptions
+                    (id, topic, target_url, secret, headers_json, status, failure_count, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    subscription.id,
+                    subscription.topic,
+                    subscription.target_url,
+                    subscription.secret,
+                    headers_json,
+                    subscription.status.value,
+                    subscription.failure_count,
+                    created_iso,
+                ),
+            )
+            await db.commit()
+
+    async def get_subscription(self, sub_id: str) -> dict[str, Any] | None:
+        """Recupera los detalles de una suscripción de webhook por su ID."""
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute("SELECT * FROM webhook_subscriptions WHERE id = ?", (sub_id,)) as cursor,
+        ):
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            data = dict(row)
+            try:
+                data["custom_headers"] = json.loads(data.pop("headers_json") or "{}")
+            except Exception:
+                data["custom_headers"] = {}
+            return data
+
+    async def list_subscriptions(
+        self,
+        topic: str | None = None,
+        status: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Lista las suscripciones registradas, con soporte opcional de patrones comodín."""
+        query = "SELECT * FROM webhook_subscriptions"
+        conditions: list[str] = []
+        params: list[Any] = []
+
+        if status:
+            conditions.append("status = ?")
+            params.append(status)
+
+        if conditions:
+            query += f" WHERE {' AND '.join(conditions)}"
+
+        query += " ORDER BY created_at DESC"
+
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute(query, tuple(params)) as cursor,
+        ):
+            rows = await cursor.fetchall()
+            results: list[dict[str, Any]] = []
+            for r in rows:
+                item = dict(r)
+                try:
+                    item["custom_headers"] = json.loads(item.pop("headers_json") or "{}")
+                except Exception:
+                    item["custom_headers"] = {}
+
+                # Filtrado por tema con coincidencia de comodines (* o prefijos)
+                sub_topic = item.get("topic", "*")
+                if topic is not None and not self._topic_matches(sub_topic, topic):
+                    continue
+                results.append(item)
+            return results
+
+    def _topic_matches(self, pattern: str, topic: str) -> bool:
+        """Determina si un tema de evento coincide con un patrón de suscripción."""
+        if pattern == "*" or pattern == topic:
+            return True
+        if pattern.endswith(".*"):
+            prefix = pattern[:-2]
+            return topic.startswith(prefix + ".") or topic == prefix
+        return False
+
+    async def delete_subscription(self, sub_id: str) -> bool:
+        """Elimina una suscripción de webhook."""
+        async with self.db_manager.get_connection() as db:
+            cursor = await db.execute("DELETE FROM webhook_subscriptions WHERE id = ?", (sub_id,))
+            await db.commit()
+            return cursor.rowcount > 0
+
+    async def record_subscription_delivery(self, sub_id: str, success: bool) -> None:
+        """Registra el resultado de un despacho, incrementando fallos o reseteándolos en éxito."""
+        async with self.db_manager.get_connection() as db:
+            if success:
+                await db.execute(
+                    "UPDATE webhook_subscriptions SET failure_count = 0 WHERE id = ?",
+                    (sub_id,),
+                )
+            else:
+                await db.execute(
+                    "UPDATE webhook_subscriptions SET failure_count = failure_count + 1 WHERE id = ?",
+                    (sub_id,),
+                )
+            await db.commit()

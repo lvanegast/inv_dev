@@ -17,7 +17,13 @@ from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, Str
 from fastapi.staticfiles import StaticFiles
 
 from flowengine.core.dag import DAGGraph, DAGValidationError
-from flowengine.core.models import ConnectionDefinition, FlowDefinition, FlowStatus
+from flowengine.core.models import (
+    ConnectionDefinition,
+    FlowDefinition,
+    FlowStatus,
+    NodeDefinition,
+    WebhookSubscription,
+)
 from flowengine.core.queue import WorkerPool
 from flowengine.core.runner import FlowRunner, retry_failed_run
 from flowengine.core.scheduler import SchedulerService
@@ -1175,3 +1181,77 @@ async def cancel_queued_job(job_id: str) -> dict[str, Any]:
             detail=f"No se pudo cancelar el trabajo '{job_id}' (puede haber finalizado ya o no existir).",
         )
     return {"message": f"Trabajo '{job_id}' cancelado exitosamente.", "job_id": job_id}
+
+
+@app.post("/api/webhooks/subscriptions")
+async def create_webhook_subscription(subscription: WebhookSubscription) -> dict[str, Any]:
+    """Registra una nueva suscripción externa para retransmisión de eventos (CDC/Fan-out)."""
+    await repo.create_subscription(subscription)
+    return {
+        "message": "Suscripción registrada exitosamente",
+        "subscription_id": subscription.id,
+        "topic": subscription.topic,
+        "target_url": subscription.target_url,
+    }
+
+
+@app.get("/api/webhooks/subscriptions")
+async def list_webhook_subscriptions(
+    topic: str | None = None,
+    status: str | None = None,
+) -> list[dict[str, Any]]:
+    """Lista las suscripciones registradas con secretos enmascarados."""
+    subs = await repo.list_subscriptions(topic=topic, status=status)
+    masked_subs: list[dict[str, Any]] = []
+    for s in subs:
+        item = dict(s)
+        sec = item.get("secret")
+        if sec:
+            item["secret"] = f"{sec[:3]}***" if len(sec) >= 3 else "***"
+        masked_subs.append(item)
+    return masked_subs
+
+
+@app.delete("/api/webhooks/subscriptions/{subscription_id}")
+async def delete_webhook_subscription(subscription_id: str) -> dict[str, Any]:
+    """Elimina una suscripción externa."""
+    deleted = await repo.delete_subscription(subscription_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Suscripción con ID '{subscription_id}' no encontrada.",
+        )
+    return {
+        "message": "Suscripción eliminada exitosamente",
+        "subscription_id": subscription_id,
+    }
+
+
+@app.post("/api/webhooks/broadcast")
+async def broadcast_event_endpoint(request: Request) -> dict[str, Any]:
+    """Difunde un evento y su payload a todos los suscriptores registrados y explícitos."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    topic = body.get("topic") or body.get("event") or "event.broadcast"
+    payload = body.get("payload") or body.get("data") or {}
+
+    from flowengine.nodes.actions_broadcast import WebhookBroadcastAction
+
+    node_def = NodeDefinition(
+        id="adhoc_broadcast",
+        type="action_webhook_broadcast",
+        config={
+            "topic": topic,
+            "payload": payload,
+            "subscribers": body.get("subscribers", []),
+            "use_db_subscriptions": body.get("use_db_subscriptions", True),
+            "timeout_seconds": body.get("timeout_seconds", 10.0),
+        },
+    )
+
+    action = WebhookBroadcastAction(node_def)
+    result = await action.execute({"__repo__": repo})
+    return result

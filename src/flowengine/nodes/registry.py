@@ -6,6 +6,7 @@ from typing import Any
 
 from flowengine.core.models import NodeDefinition
 from flowengine.nodes.actions_batch import AggregatorNode, IteratorNode
+from flowengine.nodes.actions_broadcast import WebhookBroadcastAction
 from flowengine.nodes.actions_browser import BrowserAction
 from flowengine.nodes.actions_email import EmailAction
 from flowengine.nodes.actions_filter import FilterAction
@@ -43,6 +44,7 @@ BUILTIN_NODES: dict[str, type[BaseNode]] = {
     "action_notify": NotifyAction,
     "action_im": IMAction,
     "action_mapper": DataMapperAction,
+    "action_webhook_broadcast": WebhookBroadcastAction,
 }
 
 NODE_REGISTRY: dict[str, type[BaseNode]] = dict(BUILTIN_NODES)
