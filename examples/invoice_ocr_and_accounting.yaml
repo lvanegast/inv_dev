@@ -1,0 +1,58 @@
+id: invoice-ocr-and-accounting
+name: "Extracción Inteligente de Facturas con OCR y Registro Contable"
+description: "Ingesta facturas electrónicas o comprobantes en PDF/Base64, extrae texto y campos clave mediante Document Intelligence (OCR), estructura y valida la información con Data Mapper y despacha notificaciones ejecutivas a Slack."
+status: active
+
+trigger:
+  id: webhook_factura
+  name: "Webhook: Recepción de Factura Digital"
+  type: trigger_webhook
+  config:
+    example_payload:
+      proveedor: "Tech Cloud Solutions Inc"
+      archivo_nombre: "factura_noviembre.pdf"
+      archivo_base64: "data:application/pdf;base64,RmFjdHVyYSBObzogRkFDLTIwMjYtOTA5OQpUb3RhbDogJDM0NTAuMDAKRmVjaGE6IDIwMjYtMTEtMjI="
+
+nodes:
+  # 1. Extracción de texto y campos clave con OCR
+  - id: procesar_ocr
+    name: "OCR: Extraer Campos del Documento"
+    type: action_ocr
+    config:
+      base64: "{{trigger.body.archivo_base64}}"
+      filename: "{{trigger.body.archivo_nombre}}"
+      extract_fields:
+        orden_pedido: "Pedido[:\\s]+([A-Za-z0-9-]+)"
+
+  # 2. Normalización contable de los campos extraídos con Data Mapper
+  - id: normalizar_contabilidad
+    name: "Data Mapper: Estructurar Asiento Contable"
+    type: action_mapper
+    config:
+      data: "{{procesar_ocr.fields}}"
+      rename:
+        invoice_number: "num_factura"
+        total_amount: "importe_total"
+      defaults:
+        moneda: "USD"
+        estado_auditoria: "APROBADO_AUTOMATICO"
+
+  # 3. Alerta ejecutiva con telemetría de la extracción
+  - id: notificar_contabilidad
+    name: "Notificación: Reportar Factura Procesada a Slack"
+    type: action_notify
+    config:
+      channel: "slack"
+      webhook_url: "https://hooks.slack.com/services/MOCK/ACCOUNTING/OCR"
+      title: "Factura Procesada con OCR Exitosamente"
+      message: "Se procesó la factura {{normalizar_contabilidad.num_factura}} del proveedor {{trigger.body.proveedor}}. Monto: ${{normalizar_contabilidad.importe_total}} {{normalizar_contabilidad.moneda}}."
+      color: "#10b981"
+      mock_delivery: true
+
+edges:
+  - source: webhook_factura
+    target: procesar_ocr
+  - source: procesar_ocr
+    target: normalizar_contabilidad
+  - source: normalizar_contabilidad
+    target: notificar_contabilidad

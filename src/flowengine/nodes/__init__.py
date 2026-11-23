@@ -7,6 +7,7 @@ from flowengine.nodes.actions_email import EmailAction
 from flowengine.nodes.actions_im import IMAction
 from flowengine.nodes.actions_mapper import DataMapperAction
 from flowengine.nodes.actions_notify import NotifyAction
+from flowengine.nodes.actions_ocr import OCRAction
 from flowengine.nodes.actions_sql import SqlAction
 from flowengine.nodes.actions_subflow import SubflowAction
 from flowengine.nodes.actions_tabular import TabularAction
@@ -32,6 +33,7 @@ __all__ = [
     "IMAction",
     "IteratorNode",
     "NotifyAction",
+    "OCRAction",
     "PollingTrigger",
     "SqlAction",
     "SubflowAction",

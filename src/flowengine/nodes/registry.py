@@ -15,6 +15,7 @@ from flowengine.nodes.actions_im import IMAction
 from flowengine.nodes.actions_log import LogAction
 from flowengine.nodes.actions_mapper import DataMapperAction
 from flowengine.nodes.actions_notify import NotifyAction
+from flowengine.nodes.actions_ocr import OCRAction
 from flowengine.nodes.actions_sql import SqlAction
 from flowengine.nodes.actions_subflow import SubflowAction
 from flowengine.nodes.actions_tabular import TabularAction
@@ -45,6 +46,7 @@ BUILTIN_NODES: dict[str, type[BaseNode]] = {
     "action_im": IMAction,
     "action_mapper": DataMapperAction,
     "action_webhook_broadcast": WebhookBroadcastAction,
+    "action_ocr": OCRAction,
 }
 
 NODE_REGISTRY: dict[str, type[BaseNode]] = dict(BUILTIN_NODES)
