@@ -1,8 +1,13 @@
 """Repositorio de persistencia de Flujos y Ejecuciones."""
 
+import contextlib
 import json
+import re
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
+
+import yaml
 
 from flowengine.core.models import (
     ConnectionDefinition,
@@ -10,6 +15,7 @@ from flowengine.core.models import (
     ExecutionRun,
     FlowDefinition,
     FlowStatus,
+    FlowTemplate,
     JobStatus,
     QueueJob,
     WebhookSubscription,
@@ -26,6 +32,7 @@ class FlowRepository:
 
     async def initialize(self) -> None:
         await self.db_manager.init_db()
+        await self.seed_builtin_templates()
 
     async def save_flow(self, flow: FlowDefinition, changelog: str = "") -> int:
         """Guarda o actualiza la definición de un flujo creando una versión histórica inmutable."""
@@ -859,3 +866,179 @@ class FlowRepository:
                     (sub_id,),
                 )
             await db.commit()
+
+    # --- Métodos para Catálogo de Plantillas (Flow Templates / Blueprints) ---
+
+    async def save_template(self, template: FlowTemplate) -> None:
+        """Guarda o actualiza una plantilla de flujo preconfigurada."""
+        async with self.db_manager.get_connection() as db:
+            await db.execute(
+                """
+                INSERT INTO flow_templates (
+                    id, name, description, category, tags_json, icon,
+                    difficulty, definition_yaml, variables_schema_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    name = excluded.name,
+                    description = excluded.description,
+                    category = excluded.category,
+                    tags_json = excluded.tags_json,
+                    icon = excluded.icon,
+                    difficulty = excluded.difficulty,
+                    definition_yaml = excluded.definition_yaml,
+                    variables_schema_json = excluded.variables_schema_json
+                """,
+                (
+                    template.id,
+                    template.name,
+                    template.description,
+                    template.category,
+                    json.dumps(template.tags, ensure_ascii=False),
+                    template.icon,
+                    template.difficulty,
+                    template.definition_yaml,
+                    json.dumps(template.variables_schema, ensure_ascii=False),
+                    template.created_at.isoformat(),
+                ),
+            )
+            await db.commit()
+
+    async def get_template(self, template_id: str) -> FlowTemplate | None:
+        """Obtiene una plantilla de flujo por su identificador único."""
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute("SELECT * FROM flow_templates WHERE id = ?", (template_id,)) as cursor,
+        ):
+            row = await cursor.fetchone()
+            if not row:
+                return None
+            return self._row_to_template(dict(row))
+
+    async def list_templates(
+        self,
+        category: str | None = None,
+        tag: str | None = None,
+        search: str | None = None,
+    ) -> list[FlowTemplate]:
+        """Lista las plantillas disponibles aplicando filtros opcionales de categoría, etiqueta o búsqueda."""
+        query = "SELECT * FROM flow_templates WHERE 1=1"
+        params: list[Any] = []
+
+        if category and category.lower() != "all":
+            query += " AND category = ?"
+            params.append(category.lower())
+
+        if search:
+            query += " AND (name LIKE ? OR description LIKE ?)"
+            term = f"%{search}%"
+            params.extend([term, term])
+
+        query += " ORDER BY name ASC"
+
+        async with (
+            self.db_manager.get_connection() as db,
+            db.execute(query, tuple(params)) as cursor,
+        ):
+            rows = await cursor.fetchall()
+            templates = [self._row_to_template(dict(r)) for r in rows]
+
+            if tag:
+                target_tag = tag.strip().lower()
+                templates = [t for t in templates if any(target_tag == tg.lower() for tg in t.tags)]
+
+            return templates
+
+    async def delete_template(self, template_id: str) -> bool:
+        """Elimina una plantilla por su ID."""
+        async with self.db_manager.get_connection() as db:
+            cursor = await db.execute("DELETE FROM flow_templates WHERE id = ?", (template_id,))
+            await db.commit()
+            return cursor.rowcount > 0
+
+    async def instantiate_template(
+        self,
+        template_id: str,
+        flow_id: str | None = None,
+        flow_name: str | None = None,
+        variables: dict[str, Any] | None = None,
+    ) -> FlowDefinition:
+        """Instancia un flujo nuevo a partir de una plantilla aplicando sustitución de variables."""
+        template = await self.get_template(template_id)
+        if not template:
+            raise ValueError(f"Plantilla con ID '{template_id}' no encontrada.")
+
+        # Poblar valores predeterminados del esquema de variables
+        vars_dict: dict[str, Any] = {}
+        for var_key, var_spec in template.variables_schema.items():
+            if isinstance(var_spec, dict) and "default" in var_spec:
+                vars_dict[var_key] = var_spec["default"]
+        if variables:
+            vars_dict.update(variables)
+
+        raw_yaml = template.definition_yaml
+
+        # Reemplazo de placeholders {{vars.KEY}}, {{ vars.KEY }}, y ${KEY}
+        for k, v in vars_dict.items():
+            pattern_jinja = re.compile(rf"\{{\{{\s*vars\.{re.escape(k)}\s*\}}\}}")
+            raw_yaml = pattern_jinja.sub(str(v), raw_yaml)
+            pattern_env = re.compile(rf"\$\{{{re.escape(k)}\}}")
+            raw_yaml = pattern_env.sub(str(v), raw_yaml)
+
+        data = yaml.safe_load(raw_yaml)
+        if not isinstance(data, dict):
+            raise ValueError("El YAML resultante de la plantilla no es un diccionario válido.")
+
+        flow = FlowDefinition.model_validate(data)
+
+        if flow_id:
+            flow.id = flow_id
+        else:
+            flow.id = f"{template.id}-{uuid4().hex[:8]}"
+
+        if flow_name:
+            flow.name = flow_name
+
+        await self.save_flow(
+            flow,
+            changelog=f"Instanciado desde plantilla '{template.name}' ({template.id})",
+        )
+        return flow
+
+    async def seed_builtin_templates(self) -> None:
+        """Siembra las plantillas preconfiguradas del sistema si no existen."""
+        from flowengine.storage.templates_catalog import get_builtin_templates
+
+        for tmpl in get_builtin_templates():
+            await self.save_template(tmpl)
+
+    def _row_to_template(self, row: dict[str, Any]) -> FlowTemplate:
+        """Convierte una fila de SQLite en una instancia validada de FlowTemplate."""
+        tags = []
+        try:
+            tags = json.loads(row.get("tags_json") or "[]")
+        except Exception:
+            tags = []
+
+        variables_schema = {}
+        try:
+            variables_schema = json.loads(row.get("variables_schema_json") or "{}")
+        except Exception:
+            variables_schema = {}
+
+        created_at = datetime.now(UTC)
+        if row.get("created_at"):
+            with contextlib.suppress(Exception):
+                created_at = datetime.fromisoformat(str(row["created_at"]))
+
+        return FlowTemplate(
+            id=row["id"],
+            name=row["name"],
+            description=row.get("description", ""),
+            category=row.get("category", "general"),
+            tags=tags,
+            icon=row.get("icon", "⚡"),
+            difficulty=row.get("difficulty", "beginner"),
+            definition_yaml=row["definition_yaml"],
+            variables_schema=variables_schema,
+            created_at=created_at,
+        )

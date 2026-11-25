@@ -2,7 +2,7 @@
 > **Réplica de alto rendimiento del motor de orquestación, DAG y Webhooks estilo Zapier / Make.com**
 > Desarrollado en Python moderno (3.11+) gestionado con [`uv`](https://github.com/astral-sh/uv).
 
-[![CI Tests](https://img.shields.io/badge/tests-165%20passed-brightgreen.svg)](tests/)
+[![CI Tests](https://img.shields.io/badge/tests-236%20passed-brightgreen.svg)](tests/)
 [![Python](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-blue.svg)](pyproject.toml)
 [![Toolchain](https://img.shields.io/badge/toolchain-uv-purple.svg)](https://docs.astral.sh/uv/)
 [![Linter](https://img.shields.io/badge/linter-ruff-black.svg)](https://docs.astral.sh/ruff/)
@@ -534,6 +534,41 @@ nodes:
       body_html: "<h2>Factura Aprobada</h2><p>Monto: ${{trigger.body.total}}</p>"
       connection_id: "sendgrid-smtp-conn"  # Resuelve credenciales del Connection Vault
       mock: false                         # En true simula el envío sin conexión de red
+```
+
+---
+
+## 📐 Catálogo de Plantillas y Blueprints Arquitectónicos (Fase 21)
+
+FlowEngine incorpora un **Gestor de Plantillas de Flujo y Catálogo de Automatizaciones (`Flow Templates` / *Blueprint Catalog*)**, permitiendo a usuarios y operadores desplegar arquitecturas completas con un solo clic o mediante el CLI:
+
+### 1. Galería Visual Web en `/templates`
+Accede desde la barra superior del Dashboard o en `http://127.0.0.1:8000/templates`:
+* **Buscador Dinámico & Chips por Categoría:** Filtra instantáneamente por categorías (*Ventas & CRM*, *Finanzas & OCR*, *Datos & Excel*, *Fan-Out & CDC*, *Polling & Watchdog*, *DevOps & DLQ*) y nivel de dificultad (*Principiante*, *Intermedio*, *Avanzado*).
+* **Modal de Despliegue en 1 Clic:** Renders dinámicos de formularios de variables requeridas (`variables_schema`) con descripciones y valores por defecto.
+* **Redirección Reactiva:** Despliega el flujo e ingresa directamente a su vista en el Dashboard.
+
+### 2. Blueprints Oficiales Incorporados (Seeded Out-of-the-Box)
+1. `crm-lead-scoring`: Ingesta de prospectos vía Webhook, estandarización con `action_mapper`, scoring y notificación.
+2. `invoice-ocr-accounting`: Extracción OCR de facturas PDF (`action_ocr`), persistencia SQL y emisión de evento Fan-Out.
+3. `excel-batch-commissions`: Ingesta y exportación de planillas Excel/CSV (`action_tabular`) con liquidación porcentual.
+4. `webhook-cdc-fanout`: Bus central de eventos y distribución criptográfica HMAC-SHA256 (`action_webhook_broadcast`).
+5. `polling-order-watchdog`: Sondeo incremental de pedidos sobre APIs o DB con Watermark persistente (`trigger_polling`).
+6. `scheduled-dlq-monitor`: Auditoría periódica de salud del motor y la cola de errores DLQ con alertas automáticas.
+
+### 3. Comandos de Consola CLI (`flow template ...`)
+```powershell
+# Listar todas las plantillas del catálogo con badges de dificultad y etiquetas
+uv run flow template list
+
+# Inspeccionar el esquema de variables y especificación YAML de una plantilla
+uv run flow template inspect crm-lead-scoring
+
+# Instanciar un flujo nuevo en la base de datos con sustitución de variables
+uv run flow template instantiate crm-lead-scoring --name "Pipeline Ventas Colombia" --vars '{"COMPANY_NAME": "Acme Corp", "MIN_SCORE": 80}'
+
+# Exportar un flujo activo existente hacia el catálogo como plantilla reutilizable
+uv run flow template export-flow order-processing-zap --category sales --difficulty beginner
 ```
 
 ---

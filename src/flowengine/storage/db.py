@@ -116,6 +116,21 @@ CREATE TABLE IF NOT EXISTS webhook_subscriptions (
 
 CREATE INDEX IF NOT EXISTS idx_subs_topic ON webhook_subscriptions(topic);
 CREATE INDEX IF NOT EXISTS idx_subs_status ON webhook_subscriptions(status);
+
+CREATE TABLE IF NOT EXISTS flow_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    category TEXT NOT NULL,
+    tags_json TEXT DEFAULT '[]',
+    icon TEXT DEFAULT '⚡',
+    difficulty TEXT DEFAULT 'beginner',
+    definition_yaml TEXT NOT NULL,
+    variables_schema_json TEXT DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_templates_category ON flow_templates(category);
 """
 
 

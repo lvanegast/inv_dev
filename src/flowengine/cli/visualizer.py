@@ -363,3 +363,112 @@ def print_subscriptions_table(subs: list[dict[str, Any]]) -> None:
         )
 
     console.print(table)
+
+
+def print_templates_table(templates: list[Any]) -> None:
+    """Muestra la tabla del catálogo de plantillas y blueprints en la terminal."""
+    table = Table(
+        title="Catálogo de Plantillas de Flujo (Flow Templates / Blueprints)",
+        show_lines=True,
+        header_style="bold cyan",
+    )
+    table.add_column("ID", style="bold yellow", no_wrap=True)
+    table.add_column("Plantilla", style="bold white")
+    table.add_column("Categoría", justify="center")
+    table.add_column("Dificultad", justify="center")
+    table.add_column("Etiquetas", style="dim")
+    table.add_column("Descripción", style="dim")
+
+    diff_map = {
+        "beginner": "[bold green]Principiante[/bold green]",
+        "intermediate": "[bold yellow]Intermedio[/bold yellow]",
+        "advanced": "[bold magenta]Avanzado[/bold magenta]",
+    }
+
+    for t in templates:
+        t_id = t.id if hasattr(t, "id") else t.get("id", "")
+        name = t.name if hasattr(t, "name") else t.get("name", "")
+        icon = t.icon if hasattr(t, "icon") else t.get("icon", "⚡")
+        category = t.category if hasattr(t, "category") else t.get("category", "")
+        difficulty = t.difficulty if hasattr(t, "difficulty") else t.get("difficulty", "beginner")
+        tags = t.tags if hasattr(t, "tags") else t.get("tags", [])
+        desc = t.description if hasattr(t, "description") else t.get("description", "")
+
+        diff_badge = diff_map.get(str(difficulty).lower(), str(difficulty))
+        tags_str = ", ".join(tags) if isinstance(tags, list) else str(tags)
+        short_desc = desc[:70] + "..." if len(desc) > 70 else desc
+
+        table.add_row(
+            t_id,
+            f"{icon} {name}",
+            category.upper(),
+            diff_badge,
+            tags_str,
+            short_desc,
+        )
+
+    console.print(table)
+
+
+def print_template_details(template: Any) -> None:
+    """Muestra los detalles completos, variables requeridas y YAML de una plantilla."""
+    t_id = template.id if hasattr(template, "id") else template.get("id", "")
+    name = template.name if hasattr(template, "name") else template.get("name", "")
+    icon = template.icon if hasattr(template, "icon") else template.get("icon", "⚡")
+    desc = template.description if hasattr(template, "description") else template.get("description", "")
+    cat = template.category if hasattr(template, "category") else template.get("category", "")
+    diff = template.difficulty if hasattr(template, "difficulty") else template.get("difficulty", "")
+    vars_schema = (
+        template.variables_schema
+        if hasattr(template, "variables_schema")
+        else template.get("variables_schema", {})
+    )
+    yaml_def = (
+        template.definition_yaml
+        if hasattr(template, "definition_yaml")
+        else template.get("definition_yaml", "")
+    )
+
+    console.print(
+        Panel(
+            f"[bold cyan]ID:[/bold cyan] {t_id}\n"
+            f"[bold cyan]Nombre:[/bold cyan] {icon} {name}\n"
+            f"[bold cyan]Categoría:[/bold cyan] {cat.upper()} | [bold cyan]Dificultad:[/bold cyan] {diff}\n"
+            f"[bold cyan]Descripción:[/bold cyan] {desc}",
+            title=f"Detalles de Plantilla: {t_id}",
+            border_style="cyan",
+        )
+    )
+
+    if vars_schema:
+        var_table = Table(
+            title="Variables Requeridas / Parametrizables",
+            show_lines=True,
+            header_style="bold yellow",
+        )
+        var_table.add_column("Variable", style="bold magenta")
+        var_table.add_column("Tipo", justify="center")
+        var_table.add_column("Valor por Defecto", style="bold green")
+        var_table.add_column("Etiqueta / Descripción", style="dim")
+
+        for k, v in vars_schema.items():
+            if isinstance(v, dict):
+                v_type = v.get("type", "string")
+                v_def = str(v.get("default", ""))
+                v_label = v.get("label", "") or v.get("description", "")
+            else:
+                v_type = "string"
+                v_def = str(v)
+                v_label = ""
+
+            var_table.add_row(f"{{{{vars.{k}}}}}", v_type, v_def, v_label)
+
+        console.print(var_table)
+
+    console.print(
+        Panel(
+            yaml_def,
+            title="Definición YAML de la Plantilla",
+            border_style="dim white",
+        )
+    )

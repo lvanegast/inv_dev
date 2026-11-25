@@ -21,6 +21,7 @@ from flowengine.core.models import (
     ConnectionDefinition,
     FlowDefinition,
     FlowStatus,
+    FlowTemplate,
     NodeDefinition,
     WebhookSubscription,
 )
@@ -96,6 +97,8 @@ async def admin_auth_middleware(request: Request, call_next):
             or path.startswith("/portal-operativo")
             or path.startswith("/forms")
             or path.startswith("/api/forms")
+            or path.startswith("/templates")
+            or path.startswith("/api/templates")
             or path.startswith("/api/auth/")
             or path
             in (
@@ -109,6 +112,7 @@ async def admin_auth_middleware(request: Request, call_next):
                 "/exports",
                 "/portal-operativo",
                 "/forms",
+                "/templates",
             )
             or path.endswith("/openapi.json")
             or path.endswith("/docs")
@@ -1255,3 +1259,138 @@ async def broadcast_event_endpoint(request: Request) -> dict[str, Any]:
     action = WebhookBroadcastAction(node_def)
     result = await action.execute({"__repo__": repo})
     return result
+
+
+# --- Endpoints del Catálogo de Plantillas (Flow Templates / Blueprints) ---
+
+
+@app.get("/templates", response_class=HTMLResponse)
+async def templates_gallery_page() -> HTMLResponse:
+    """Renderiza el Catálogo Visual de Plantillas y Blueprints."""
+    template_file = TEMPLATES_DIR / "templates_gallery.html"
+    if not template_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Plantilla templates_gallery.html no encontrada.",
+        )
+    return HTMLResponse(content=template_file.read_text(encoding="utf-8"))
+
+
+@app.get("/api/templates")
+async def list_templates_endpoint(
+    category: str | None = None,
+    tag: str | None = None,
+    search: str | None = None,
+) -> list[dict[str, Any]]:
+    """Lista las plantillas disponibles con filtros opcionales de categoría, etiqueta o búsqueda."""
+    templates = await repo.list_templates(category=category, tag=tag, search=search)
+    return [t.model_dump() for t in templates]
+
+
+@app.get("/api/templates/{template_id}")
+async def get_template_endpoint(template_id: str) -> dict[str, Any]:
+    """Obtiene los detalles y esquema de variables de una plantilla específica."""
+    template = await repo.get_template(template_id)
+    if not template:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Plantilla con ID '{template_id}' no encontrada.",
+        )
+    return template.model_dump()
+
+
+@app.post("/api/templates", status_code=201)
+async def create_template_endpoint(template: FlowTemplate) -> dict[str, Any]:
+    """Registra o actualiza una plantilla en el catálogo."""
+    await repo.save_template(template)
+    return {"status": "created", "template": template.model_dump()}
+
+
+@app.post("/api/templates/{template_id}/instantiate", status_code=201)
+async def instantiate_template_endpoint(template_id: str, request: Request) -> dict[str, Any]:
+    """Instancia un nuevo flujo activo a partir de una plantilla aplicando sustitución de variables."""
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    flow_id = body.get("flow_id")
+    flow_name = body.get("flow_name")
+    variables = body.get("variables", {})
+
+    try:
+        flow = await repo.instantiate_template(
+            template_id=template_id,
+            flow_id=flow_id,
+            flow_name=flow_name,
+            variables=variables,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error instanciando plantilla: {e}")
+
+    return {
+        "status": "instantiated",
+        "message": f"Flujo '{flow.name}' instanciado exitosamente.",
+        "flow": flow.model_dump(),
+    }
+
+
+@app.post("/api/flows/{flow_id}/export-template", status_code=201)
+async def export_flow_to_template_endpoint(flow_id: str, request: Request) -> dict[str, Any]:
+    """Convierte un flujo existente en una plantilla reutilizable del catálogo."""
+    flow = await repo.get_flow(flow_id)
+    if not flow:
+        raise HTTPException(status_code=404, detail=f"Flujo con ID '{flow_id}' no encontrado.")
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    tmpl_id = body.get("id") or f"template-{flow.id}"
+    tmpl_name = body.get("name") or f"Plantilla: {flow.name}"
+    description = body.get("description") or flow.description or "Plantilla exportada desde flujo existente"
+    category = body.get("category") or "general"
+    tags = body.get("tags") or ["exported", "custom"]
+    icon = body.get("icon") or "⚡"
+    difficulty = body.get("difficulty") or "intermediate"
+    variables_schema = body.get("variables_schema") or {}
+
+    definition_yaml = yaml.dump(flow.model_dump(mode="json"), sort_keys=False, allow_unicode=True)
+
+    template = FlowTemplate(
+        id=tmpl_id,
+        name=tmpl_name,
+        description=description,
+        category=category,
+        tags=tags,
+        icon=icon,
+        difficulty=difficulty,
+        definition_yaml=definition_yaml,
+        variables_schema=variables_schema,
+    )
+
+    await repo.save_template(template)
+    return {
+        "status": "exported",
+        "message": f"Flujo exportado como plantilla '{template.name}'.",
+        "template": template.model_dump(),
+    }
+
+
+@app.delete("/api/templates/{template_id}")
+async def delete_template_endpoint(template_id: str) -> dict[str, Any]:
+    """Elimina una plantilla del catálogo."""
+    deleted = await repo.delete_template(template_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Plantilla con ID '{template_id}' no encontrada.",
+        )
+    return {
+        "status": "deleted",
+        "message": "Plantilla eliminada exitosamente",
+        "template_id": template_id,
+    }

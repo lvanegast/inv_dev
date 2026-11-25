@@ -21,6 +21,8 @@ from flowengine.cli.visualizer import (
     print_run_result,
     print_runs_history,
     print_subscriptions_table,
+    print_template_details,
+    print_templates_table,
     print_test_suite_results,
 )
 from flowengine.core.dag import DAGGraph, DAGValidationError
@@ -28,6 +30,7 @@ from flowengine.core.models import (
     ConnectionDefinition,
     ConnectionType,
     FlowDefinition,
+    FlowTemplate,
     WebhookSubscription,
 )
 from flowengine.core.runner import FlowRunner, retry_failed_run
@@ -638,6 +641,137 @@ def subscription_delete_cmd(
     else:
         console.print(f"[bold red][ERROR] Suscripción '{subscription_id}' no encontrada.[/bold red]")
         raise typer.Exit(code=1)
+
+
+template_app = typer.Typer(
+    name="template",
+    help="Gestión del catálogo de plantillas y blueprints arquitectónicos",
+    add_completion=False,
+)
+app.add_typer(template_app, name="template")
+
+
+@template_app.command(name="list")
+def template_list_cmd(
+    category: str | None = typer.Option(
+        None, "--category", "-c", help="Filtrar por categoría (sales, finance, data, etc.)"
+    ),
+    tag: str | None = typer.Option(None, "--tag", "-t", help="Filtrar por etiqueta"),
+    search: str | None = typer.Option(
+        None, "--search", "-s", help="Buscar por término en nombre o descripción"
+    ),
+) -> None:
+    """Lista las plantillas disponibles en el catálogo."""
+    repo = FlowRepository()
+
+    async def _list():
+        await repo.initialize()
+        return await repo.list_templates(category=category, tag=tag, search=search)
+
+    templates = asyncio.run(_list())
+    if not templates:
+        console.print("[yellow]No se encontraron plantillas que coincidan con los criterios.[/yellow]")
+        return
+    print_templates_table(templates)
+
+
+@template_app.command(name="inspect")
+def template_inspect_cmd(
+    template_id: str = typer.Argument(..., help="ID único de la plantilla a inspeccionar"),
+) -> None:
+    """Muestra los detalles, esquema de variables y especificación YAML de una plantilla."""
+    repo = FlowRepository()
+
+    async def _inspect():
+        await repo.initialize()
+        return await repo.get_template(template_id)
+
+    tmpl = asyncio.run(_inspect())
+    if not tmpl:
+        console.print(f"[bold red][ERROR] Plantilla '{template_id}' no encontrada.[/bold red]")
+        raise typer.Exit(code=1)
+    print_template_details(tmpl)
+
+
+@template_app.command(name="instantiate")
+def template_instantiate_cmd(
+    template_id: str = typer.Argument(..., help="ID de la plantilla a utilizar"),
+    flow_id: str | None = typer.Option(None, "--id", help="ID personalizado para el nuevo flujo"),
+    flow_name: str | None = typer.Option(None, "--name", "-n", help="Nombre amigable para el nuevo flujo"),
+    vars_json: str | None = typer.Option(None, "--vars", "-v", help="Variables de parametrización en JSON"),
+) -> None:
+    """Instancia un nuevo flujo activo en la base de datos a partir de una plantilla."""
+    repo = FlowRepository()
+    variables = {}
+    if vars_json:
+        try:
+            variables = json.loads(vars_json)
+        except Exception as e:
+            console.print(f"[bold red][ERROR] El JSON de variables es inválido:[/bold red] {e}")
+            raise typer.Exit(code=1)
+
+    async def _instantiate():
+        await repo.initialize()
+        return await repo.instantiate_template(
+            template_id=template_id,
+            flow_id=flow_id,
+            flow_name=flow_name,
+            variables=variables,
+        )
+
+    try:
+        flow = asyncio.run(_instantiate())
+    except Exception as e:
+        console.print(f"[bold red][ERROR] Error al instanciar plantilla:[/bold red] {e}")
+        raise typer.Exit(code=1)
+
+    console.print(
+        f"[bold green][OK] Flujo '{flow.name}' instanciado exitosamente con ID '{flow.id}'.[/bold green]"
+    )
+    print_flow_tree(flow)
+
+
+@template_app.command(name="export-flow")
+def template_export_flow_cmd(
+    flow_id: str = typer.Argument(..., help="ID del flujo registrado a exportar como plantilla"),
+    template_id: str | None = typer.Option(None, "--id", help="ID deseado para la plantilla"),
+    name: str | None = typer.Option(None, "--name", "-n", help="Nombre descriptivo de la plantilla"),
+    category: str = typer.Option("general", "--category", "-c", help="Categoría temática"),
+    difficulty: str = typer.Option(
+        "intermediate", "--difficulty", "-d", help="Dificultad (beginner, intermediate, advanced)"
+    ),
+) -> None:
+    """Exporta un flujo activo existente hacia el catálogo de plantillas."""
+    repo = FlowRepository()
+
+    async def _export():
+        await repo.initialize()
+        flow = await repo.get_flow(flow_id)
+        if not flow:
+            return None
+        t_id = template_id or f"template-{flow.id}"
+        t_name = name or f"Plantilla: {flow.name}"
+        yaml_def = yaml.dump(flow.model_dump(mode="json"), sort_keys=False, allow_unicode=True)
+        tmpl = FlowTemplate(
+            id=t_id,
+            name=t_name,
+            description=flow.description or "Plantilla exportada",
+            category=category,
+            tags=["exported", "custom"],
+            icon="⚡",
+            difficulty=difficulty,
+            definition_yaml=yaml_def,
+            variables_schema={},
+        )
+        await repo.save_template(tmpl)
+        return tmpl
+
+    result = asyncio.run(_export())
+    if not result:
+        console.print(f"[bold red][ERROR] Flujo '{flow_id}' no encontrado en la base de datos.[/bold red]")
+        raise typer.Exit(code=1)
+
+    console.print(f"[bold green][OK] Flujo '{flow_id}' exportado como plantilla '{result.id}'.[/bold green]")
 
 
 if __name__ == "__main__":

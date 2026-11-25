@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Catálogo de Plantillas y Blueprints - FlowEngine</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @keyframes pulse-subtle {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .blueprint-card {
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .blueprint-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 16px 32px -8px rgba(14, 165, 233, 0.15), 0 0 0 1px rgba(56, 189, 248, 0.3);
+    }
+  </style>
+</head>
+<body class="h-full flex flex-col font-sans bg-slate-950 text-slate-100 antialiased selection:bg-sky-500 selection:text-white">
+
+  <!-- Barra de Navegación Superior -->
+  <header class="bg-slate-900/90 border-b border-slate-800 sticky top-0 z-30 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-4">
+        <a href="/templates" class="flex items-center space-x-3 text-white font-bold text-lg hover:opacity-90 transition">
+          <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-sky-500/20 text-white font-extrabold text-lg">
+            <i class="fa-solid fa-shapes text-sm"></i>
+          </div>
+          <div>
+            <span class="tracking-tight">FlowEngine</span>
+            <span class="text-xs font-normal text-sky-400 block -mt-1 font-mono uppercase tracking-wider">Catálogo de Blueprints</span>
+          </div>
+        </a>
+      </div>
+
+      <div class="flex items-center space-x-3">
+        <a href="/dashboard" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium border border-slate-700 transition flex items-center gap-1.5 shadow-sm">
+          <i class="fa-solid fa-gauge text-slate-400"></i>
+          <span>Dashboard</span>
+        </a>
+        <a href="/forms" class="px-3.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-medium border border-slate-700/60 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-list-check text-slate-400"></i>
+          <span>Formularios</span>
+        </a>
+        <a href="/docs" target="_blank" class="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-white text-xs font-medium border border-slate-700/60 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-book-bookmark text-xs"></i>
+          <span>API Docs</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="bg-gradient-to-r from-slate-900 via-sky-950/30 to-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 mb-8 shadow-xl relative overflow-hidden">
+      <div class="absolute -right-12 -top-12 w-64 h-64 bg-sky-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="max-w-3xl relative z-10">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30 mb-3">
+          <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+          Plantillas Listas para Producción
+        </span>
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">Catálogo de Automatizaciones & Blueprints</h1>
+        <p class="mt-2 text-sm sm:text-base text-slate-300 leading-relaxed">
+          Inicia tus flujos de trabajo al instante a partir de arquitecturas comprobadas. Personaliza variables de entorno y despliega pipelines completos de CRM, facturación OCR, procesamiento de planillas Excel o monitoreo en un solo clic.
+        </p>
+      </div>
+    </div>
+
+    <!-- Filtros y Búsqueda -->
+    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 mb-6">
+      <!-- Buscador -->
+      <div class="relative flex-1 max-w-md">
+        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm"></i>
+        <input
+          type="text"
+          id="search-input"
+          placeholder="Buscar por nombre, etiquetas, palabras clave..."
+          oninput="filterTemplates()"
+          class="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-800 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-transparent transition"
+        />
+      </div>
+
+      <!-- Filtro por Categorías -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 scrollbar-none" id="category-chips">
+        <button onclick="setCategoryFilter('all')" class="cat-chip active px-3.5 py-1.5 rounded-lg text-xs font-medium bg-sky-600 text-white shadow-sm transition whitespace-nowrap" data-cat="all">
+          Todos (<span id="count-all">0</span>)
+        </button>
+        <button onclick="setCategoryFilter('sales')" class="cat-chip px-3.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 transition whitespace-nowrap" data-cat="sales">
+          🎯 Ventas & CRM
+        </button>
+        <button onclick="setCategoryFilter('finance')" class="cat-chip px-3.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 transition whitespace-nowrap" data-cat="finance">
+          🧾 Finanzas & OCR
+        </button>
+        <button onclick="setCategoryFilter('data')" class="cat-chip px-3.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 transition whitespace-nowrap" data-cat="data">
+          📊 Datos & Excel
+        </button>
+        <button onclick="setCategoryFilter('integration')" class="cat-chip px-3.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 transition whitespace-nowrap" data-cat="integration">
+          📡 Fan-Out & CDC
+        </button>
+        <button onclick="setCategoryFilter('monitoring')" class="cat-chip px-3.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 transition whitespace-nowrap" data-cat="monitoring">
+          ⏱️ Polling & Watchdog
+        </button>
+        <button onclick="setCategoryFilter('devops')" class="cat-chip px-3.5 py-1.5 rounded-lg text-xs font-medium bg-slate-900 text-slate-400 hover:text-white border border-slate-800 hover:border-slate-700 transition whitespace-nowrap" data-cat="devops">
+          🛡️ DevOps & DLQ
+        </button>
+      </div>
+    </div>
+
+    <!-- Grid de Plantillas -->
+    <div id="templates-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Inyectado dinámicamente con JavaScript -->
+      <div class="col-span-full py-12 text-center text-slate-500">
+        <i class="fa-solid fa-circle-notch fa-spin text-2xl text-sky-500 mb-2"></i>
+        <p>Cargando catálogo de plantillas...</p>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden py-16 text-center">
+      <div class="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto mb-4 text-slate-600 text-2xl">
+        <i class="fa-solid fa-filter"></i>
+      </div>
+      <h3 class="text-base font-semibold text-slate-300">No se encontraron plantillas</h3>
+      <p class="text-sm text-slate-500 mt-1 max-w-sm mx-auto">Prueba ajustando los filtros de búsqueda o categoría seleccionada.</p>
+    </div>
+  </main>
+
+  <!-- Modal de Instanciación de Plantilla -->
+  <div id="instantiate-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
+      <div class="flex items-start justify-between pb-4 border-b border-slate-800">
+        <div class="flex items-center space-x-3">
+          <div id="modal-icon" class="w-10 h-10 rounded-xl bg-sky-500/20 text-sky-400 border border-sky-500/30 flex items-center justify-center text-xl">
+            ⚡
+          </div>
+          <div>
+            <h3 id="modal-title" class="text-lg font-bold text-white">Instanciar Plantilla</h3>
+            <span id="modal-category" class="text-xs font-mono text-sky-400 uppercase">CATEGORÍA</span>
+          </div>
+        </div>
+        <button onclick="closeInstantiateModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto py-4 space-y-4 pr-1">
+        <p id="modal-description" class="text-sm text-slate-300 leading-relaxed"></p>
+
+        <!-- Configuración General del Flujo -->
+        <div class="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 space-y-3">
+          <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <i class="fa-solid fa-gear text-slate-500"></i>
+            Parámetros del Nuevo Flujo
+          </h4>
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">Nombre del Flujo</label>
+            <input type="text" id="instantiate-name" class="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1">ID Único del Flujo (Opcional)</label>
+            <input type="text" id="instantiate-id" placeholder="Autogenerado si se deja en blanco" class="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500" />
+          </div>
+        </div>
+
+        <!-- Variables Específicas de la Plantilla -->
+        <div id="variables-container" class="space-y-3">
+          <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+            <i class="fa-solid fa-sliders text-sky-400"></i>
+            Variables de la Plantilla
+          </h4>
+          <div id="variables-fields" class="space-y-3">
+            <!-- Campos dinámicos -->
+          </div>
+        </div>
+      </div>
+
+      <div class="pt-4 border-t border-slate-800 flex items-center justify-end space-x-3">
+        <button onclick="closeInstantiateModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition">
+          Cancelar
+        </button>
+        <button id="btn-submit-instantiate" onclick="submitInstantiation()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-xs font-semibold shadow-lg shadow-sky-500/20 transition flex items-center gap-2">
+          <span>Desplegar e Iniciar</span>
+          <i class="fa-solid fa-arrow-right text-xs"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Inspección / YAML -->
+  <div id="inspect-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center space-x-3">
+          <span id="inspect-icon" class="text-2xl">⚡</span>
+          <div>
+            <h3 id="inspect-title" class="text-lg font-bold text-white">Especificación de Plantilla</h3>
+            <span id="inspect-id" class="text-xs font-mono text-slate-400"></span>
+          </div>
+        </div>
+        <button onclick="closeInspectModal()" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto py-4 space-y-4">
+        <div>
+          <h4 class="text-xs font-bold uppercase text-slate-400 mb-2">Definición YAML Declarativa</h4>
+          <pre id="inspect-yaml" class="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs font-mono text-sky-300 overflow-x-auto selection:bg-sky-500 selection:text-white"></pre>
+        </div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-between">
+        <button onclick="copyYamlToClipboard()" class="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition flex items-center gap-1.5">
+          <i class="fa-regular fa-copy text-xs"></i>
+          <span id="copy-text">Copiar YAML</span>
+        </button>
+        <button onclick="openInstantiateFromInspect()" class="px-4 py-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-md transition flex items-center gap-1.5">
+          <span>Usar Esta Plantilla</span>
+          <i class="fa-solid fa-wand-magic-sparkles text-xs"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allTemplates = [];
+    let activeCategory = 'all';
+    let currentTemplate = null;
+
+    async function loadTemplates() {
+      try {
+        const res = await fetch('/api/templates');
+        if (!res.ok) throw new Error('Error al cargar plantillas');
+        allTemplates = await res.json();
+        document.getElementById('count-all').innerText = allTemplates.length;
+        renderTemplates();
+      } catch (err) {
+        console.error(err);
+        document.getElementById('templates-grid').innerHTML = `
+          <div class="col-span-full py-12 text-center text-rose-400">
+            <i class="fa-solid fa-triangle-exclamation text-2xl mb-2"></i>
+            <p>Error cargando catálogo de plantillas.</p>
+          </div>
+        `;
+      }
+    }
+
+    function setCategoryFilter(cat) {
+      activeCategory = cat;
+      document.querySelectorAll('.cat-chip').forEach(btn => {
+        if (btn.getAttribute('data-cat') === cat) {
+          btn.classList.add('bg-sky-600', 'text-white');
+          btn.classList.remove('bg-slate-900', 'text-slate-400', 'border-slate-800');
+        } else {
+          btn.classList.remove('bg-sky-600', 'text-white');
+          btn.classList.add('bg-slate-900', 'text-slate-400', 'border-slate-800');
+        }
+      });
+      renderTemplates();
+    }
+
+    function filterTemplates() {
+      renderTemplates();
+    }
+
+    function renderTemplates() {
+      const search = document.getElementById('search-input').value.toLowerCase().trim();
+      const grid = document.getElementById('templates-grid');
+      const emptyState = document.getElementById('empty-state');
+
+      const filtered = allTemplates.filter(t => {
+        const matchesCat = (activeCategory === 'all') || (t.category && t.category.toLowerCase() === activeCategory);
+        const matchesSearch = !search || 
+          t.name.toLowerCase().includes(search) || 
+          (t.description && t.description.toLowerCase().includes(search)) ||
+          (t.tags && t.tags.some(tag => tag.toLowerCase().includes(search)));
+        return matchesCat && matchesSearch;
+      });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = '';
+        emptyState.classList.remove('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+
+      const diffBadge = {
+        'beginner': '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Principiante</span>',
+        'intermediate': '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">Intermedio</span>',
+        'advanced': '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">Avanzado</span>'
+      };
+
+      grid.innerHTML = filtered.map(t => {
+        const badge = diffBadge[t.difficulty] || diffBadge['beginner'];
+        const tags = (t.tags || []).map(tag => `<span class="px-2 py-0.5 rounded text-[11px] bg-slate-800/80 text-slate-400 font-mono">#${tag}</span>`).join(' ');
+
+        return `
+          <div class="blueprint-card bg-slate-900 border border-slate-800/90 rounded-2xl p-6 flex flex-col justify-between shadow-lg relative overflow-hidden group">
+            <div class="absolute -right-6 -bottom-6 w-32 h-32 bg-sky-500/5 rounded-full blur-2xl group-hover:bg-sky-500/10 transition"></div>
+            
+            <div>
+              <div class="flex items-start justify-between mb-4">
+                <div class="w-12 h-12 rounded-xl bg-slate-800/90 border border-slate-700/60 flex items-center justify-center text-2xl shadow-inner">
+                  ${t.icon || '⚡'}
+                </div>
+                <div>${badge}</div>
+              </div>
+
+              <div class="mb-2">
+                <span class="text-[10px] font-mono uppercase tracking-wider text-sky-400 font-semibold">${t.category || 'GENERAL'}</span>
+                <h3 class="text-base font-bold text-white group-hover:text-sky-300 transition mt-0.5 leading-snug">${t.name}</h3>
+              </div>
+
+              <p class="text-xs text-slate-400 leading-relaxed mb-4 line-clamp-3">
+                ${t.description || 'Sin descripción.'}
+              </p>
+
+              <div class="flex flex-wrap gap-1.5 mb-6">
+                ${tags}
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-slate-800/70 flex items-center justify-between gap-2">
+              <button onclick="openInspectModal('${t.id}')" class="px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700/50 transition flex items-center gap-1.5">
+                <i class="fa-solid fa-code text-[11px]"></i>
+                <span>Ver YAML</span>
+              </button>
+
+              <button onclick="openInstantiateModal('${t.id}')" class="px-3.5 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold shadow-md shadow-sky-600/20 transition flex items-center gap-1.5">
+                <span>Usar Plantilla</span>
+                <i class="fa-solid fa-arrow-right text-[11px]"></i>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function openInstantiateModal(templateId) {
+      currentTemplate = allTemplates.find(t => t.id === templateId);
+      if (!currentTemplate) return;
+
+      document.getElementById('modal-icon').innerText = currentTemplate.icon || '⚡';
+      document.getElementById('modal-title').innerText = currentTemplate.name;
+      document.getElementById('modal-category').innerText = (currentTemplate.category || 'GENERAL').toUpperCase();
+      document.getElementById('modal-description').innerText = currentTemplate.description || '';
+      document.getElementById('instantiate-name').value = `${currentTemplate.name} (Instancia)`;
+      document.getElementById('instantiate-id').value = '';
+
+      const fieldsContainer = document.getElementById('variables-fields');
+      const varsSchema = currentTemplate.variables_schema || {};
+      const varKeys = Object.keys(varsSchema);
+
+      if (varKeys.length === 0) {
+        fieldsContainer.innerHTML = '<p class="text-xs text-slate-500 italic">Esta plantilla no requiere variables adicionales.</p>';
+      } else {
+        fieldsContainer.innerHTML = varKeys.map(key => {
+          const spec = varsSchema[key] || {};
+          const label = spec.label || key;
+          const defVal = spec.default !== undefined ? spec.default : '';
+          const desc = spec.description ? `<p class="text-[11px] text-slate-500 mt-0.5">${spec.description}</p>` : '';
+          const type = spec.type === 'integer' || spec.type === 'number' ? 'number' : 'text';
+
+          return `
+            <div>
+              <label class="block text-xs font-medium text-slate-300 mb-1">
+                ${label} <span class="text-sky-400 font-mono text-[11px]">({{vars.${key}}})</span>
+              </label>
+              <input
+                type="${type}"
+                id="var-field-${key}"
+                data-varkey="${key}"
+                value="${defVal}"
+                class="template-var-input w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+              ${desc}
+            </div>
+          `;
+        }).join('');
+      }
+
+      document.getElementById('instantiate-modal').classList.remove('hidden');
+    }
+
+    function closeInstantiateModal() {
+      document.getElementById('instantiate-modal').classList.add('hidden');
+    }
+
+    function openInspectModal(templateId) {
+      currentTemplate = allTemplates.find(t => t.id === templateId);
+      if (!currentTemplate) return;
+
+      document.getElementById('inspect-icon').innerText = currentTemplate.icon || '⚡';
+      document.getElementById('inspect-title').innerText = currentTemplate.name;
+      document.getElementById('inspect-id').innerText = `ID: ${currentTemplate.id}`;
+      document.getElementById('inspect-yaml').innerText = currentTemplate.definition_yaml;
+      document.getElementById('inspect-modal').classList.remove('hidden');
+    }
+
+    function closeInspectModal() {
+      document.getElementById('inspect-modal').classList.add('hidden');
+    }
+
+    function openInstantiateFromInspect() {
+      closeInspectModal();
+      if (currentTemplate) {
+        openInstantiateModal(currentTemplate.id);
+      }
+    }
+
+    function copyYamlToClipboard() {
+      if (!currentTemplate) return;
+      navigator.clipboard.writeText(currentTemplate.definition_yaml).then(() => {
+        const copyText = document.getElementById('copy-text');
+        copyText.innerText = '¡Copiado!';
+        setTimeout(() => copyText.innerText = 'Copiar YAML', 2000);
+      });
+    }
+
+    async function submitInstantiation() {
+      if (!currentTemplate) return;
+      const btn = document.getElementById('btn-submit-instantiate');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i><span>Desplegando...</span>';
+
+      const flowName = document.getElementById('instantiate-name').value.trim();
+      const flowId = document.getElementById('instantiate-id').value.trim() || undefined;
+
+      const variables = {};
+      document.querySelectorAll('.template-var-input').forEach(input => {
+        const key = input.getAttribute('data-varkey');
+        let val = input.value;
+        if (input.type === 'number') {
+          val = Number(val);
+        }
+        variables[key] = val;
+      });
+
+      try {
+        const res = await fetch(`/api/templates/${encodeURIComponent(currentTemplate.id)}/instantiate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            flow_name: flowName,
+            flow_id: flowId,
+            variables: variables
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Fallo al instanciar');
+
+        closeInstantiateModal();
+        alert(`¡Flujo '${data.flow.name}' instanciado exitosamente!\nRedirigiendo al Dashboard.`);
+        window.location.href = `/dashboard?flow=${encodeURIComponent(data.flow.id)}`;
+      } catch (err) {
+        alert('Error: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>Desplegar e Iniciar</span><i class="fa-solid fa-arrow-right text-xs"></i>';
+      }
+    }
+
+    // Inicializar catálogo al cargar página
+    document.addEventListener('DOMContentLoaded', loadTemplates);
+  </script>
+</body>
+</html>

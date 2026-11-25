@@ -244,3 +244,31 @@ class ExecutionRun(BaseModel):
         if self.finished_at and self.started_at:
             return (self.finished_at - self.started_at).total_seconds() * 1000
         return 0.0
+
+
+class FlowTemplate(BaseModel):
+    """Plantilla preconfigurada o plano arquitectónico (Blueprint) de flujo automatizado."""
+
+    id: str = Field(description="Identificador único de la plantilla (ej. 'crm-lead-scoring')")
+    name: str = Field(description="Nombre descriptivo de la plantilla")
+    description: str = Field(default="", description="Resumen funcional y propósito de la plantilla")
+    category: str = Field(
+        default="general",
+        description="Categoría temática (sales, finance, devops, marketing, integration, general)",
+    )
+    tags: list[str] = Field(default_factory=list, description="Etiquetas de búsqueda y clasificación")
+    icon: str = Field(default="⚡", description="Emoji o icono visual representativo")
+    difficulty: str = Field(
+        default="beginner",
+        description="Nivel de dificultad técnica (beginner, intermediate, advanced)",
+    )
+    definition_yaml: str = Field(
+        description="Especificación YAML del flujo base con variables parametrizables {{vars.KEY}}",
+    )
+    variables_schema: dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Esquema de variables requeridas para instanciar la plantilla (tipo, default, label, etc.)"
+        ),
+    )
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
